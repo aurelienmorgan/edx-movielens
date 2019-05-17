@@ -1,0 +1,3003 @@
+---
+title: \pagenumbering{gobble} <!-- ends page numbering "`r Sys.Date()`" -->\vspace{3.5in}Introductory Recommender Engine
+subtitle: "Use Case: 'The MovieLens 10M dataset'"
+date: "2019-02-27"
+author: "Aurélien-Morgan"
+output:
+  pdf_document:
+    toc: false
+    toc_depth: 2
+    number_sections: true
+    keep_tex: true
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    fig_crop: false
+    df_print: kable
+    highlight: tango
+    pandoc_args: [
+      "--natbib"
+    ]
+
+graphics: yes
+fontsize: 10pt
+linkcolor: blue
+urlcolor: cyan
+geometry: margin=1in
+documentclass: article
+classoption: twosided
+
+header-includes:
+  - \hypersetup{
+      pdfauthor={Aurélien-Morgan},
+      pdftitle={},
+      pdfsubject={},
+      pdfkeywords={},
+      pdfproducer={MiKTeX pdfTeX with hyperref},
+      pdfcreator={PdfLaTeX},
+      bookmarksnumbered=true,
+      bookmarksopen=true,
+      bookmarksopenlevel=2,
+      pdfstartview=FitH,
+      pdfpagelayout=OneColumn,
+      unicode=true,
+      bookmarks=true,
+      pdfpagemode=UseOutlines,
+      pdfinfo={
+        CreationDate={D:20181229195600}
+      },
+      citecolor=magenta
+    }
+
+# for 'vector' annotation in LaTex ; @see 'https://tex.stackexchange.com/questions/163279/how-can-i-type-formula-cosine-of-two-vectors-nice'
+  - \usepackage{esvect}
+
+  - \usepackage[table]{xcolor}
+  - \usepackage{wrapfig}
+
+# fix the "! Undefined control sequence. l.115 \toprule" issue with the r 'kableExtra ' package ; @see 'https://github.com/rstudio/rmarkdown/issues/1384#issuecomment-400106730'
+  - \usepackage{booktabs}
+
+
+# allow for portrait/lanscape pages switch ; @see 'https://stackoverflow.com/questions/25849814/rstudio-rmarkdown-both-portrait-and-landscape-layout-in-a-single-pdf#27334272'
+  - \usepackage{lscape}
+  - \usepackage{pdflscape}
+
+  - <!-- remove margin for figures and tables captions ; @see 'https://tex.stackexchange.com/questions/94016/how-to-reduce-space-between-image-and-its-caption#94018' -->
+  - \usepackage[font=small,skip=0pt]{caption}
+  - <!-- fix the "'fig' r tags fixed at top of pages" issue ; @see 'https://stackoverflow.com/questions/29696172/how-to-hold-figure-position-with-figure-caption-in-pdf-output-of-knitr#51608212' -->
+  - \usepackage{float}
+  - \floatplacement{figure}{H}
+
+  - \setlength{\columnsep}{18pt}
+  - \usepackage{multicol}
+  - <!-- fix to the multicol/pandoc compatibility issue ; @see 'https://stackoverflow.com/questions/40982836/latex-multicolumn-block-in-pandoc-markdown#41005796' -->
+  - \newcommand{\hideFromPandoc}[1]{#1}
+  - \hideFromPandoc{
+      \let\Begin\begin
+      \let\End\end
+      \let\Vspace\vspace
+    }
+
+  - \usepackage{fancyhdr}
+  - <!-- declare custom 'firststyle' (footer) -->
+  - \fancypagestyle{firststyle} {
+      \fancyhf{}
+      \newcommand {\changefont} {\fontsize{6}{8}\selectfont}
+      \pagestyle{fancy}
+      \renewcommand{\headrulewidth}{0pt}
+      \fancyfoot[LE, LO]{\begin{minipage}[c]{3cm}\end{minipage}}
+      \fancyfoot[CE, CO]{\begin{minipage}[c]{.6\textwidth}\changefont Harvard Executive Education – Data Science Professional Certification Program\\\begin{center}– Capstone Project 1 / 2 - mandatory topic -\end{center}\end{minipage}}
+        \IfFileExists{./harvardx_logo_100.jpg}{
+          \fancyfoot[RE, RO]{\begin{minipage}[c]{3cm}\includegraphics[]{./harvardx_logo_100.jpg}\end{minipage}}
+        }{
+          `r if( !file.exists( "./harvardx_logo_100.jpg" ) ) try( download.file(url = "https://www.edx.org/sites/default/files/upload/harvardx_logo_100.jpg", destfile = "harvardx_logo_100.jpg", mode = 'wb') )`
+           \fancyfoot[RE, RO]{\begin{minipage}[c]{3cm}\end{minipage}}
+        }
+    }
+  - \fancypagestyle{plain}{\pagestyle{firststyle}} <!-- apply custom 'firststyle' (footer) to cover page -->
+  - \setcounter{section}{-1} <!-- start numbering sections at '0' -->
+  - \renewcommand{\contentsname}{}\vspace{-0.5cm}
+  - \renewcommand{\listfigurename}{}\vspace{-0.5cm}
+  - \renewcommand{\listtablename}{}\vspace{-0.5cm}
+  - \renewcommand\refname{}\vspace{-0.5cm}
+  - \RequirePackage{filecontents}
+
+biblio-style: unsrt <!-- to allow for 'numbered' citations/references -->
+bibliography: Reportbib
+
+params:
+  dummy: <!-- centralizes inputs -->
+  overallAccuracy: "98%"
+  rmse: "0.881 stars"
+  a_vector: !r c( "toto", "titi" )
+
+---
+
+
+
+<!--
+amc_pdf_print()
+-->
+
+
+
+<!--
+REQUIRES minimal MiKTeX installation
+with 'upquote', 'natbib', 'filecontents', 'fancyhdr', 'multicol', 'float', 'caption', 'lscape', 'pdflscape', 'booktabs', 'wrapfig', 'xcolor' and 'esvect'
+packages installed
+-->
+
+
+<!--
+amc_pdf_print( paramsList = list(
+  overallAccuracy = "97.9%"
+  , rmse = "0.879 stars"
+  , a_vector = c( "tata", "tutu" ) ) )
+-->
+
+
+
+
+<style>
+  .main-container {
+    max-width: 120px !important;
+  }
+</style>
+
+
+<!--
+tidy.opts=list(width.cutoff=60, tidy=TRUE)
+-->
+
+```{r global_options, R.options=knitr::opts_chunk$set( warning=FALSE, message=FALSE, echo = TRUE, dev = 'pdf', cache = FALSE, results=TRUE, include=TRUE, eval=TRUE ) }
+```
+
+```{r echo = FALSE, results = 'hide', include = FALSE, message = FALSE, warning = FALSE }
+if( !require( tidyverse ) ) { install.packages( "tidyverse" ) } ; suppressWarnings(suppressMessages(suppressPackageStartupMessages(library( tidyverse, quietly = TRUE ))))
+if( !require( data.table ) ) { install.packages( "data.table" ) } ; suppressWarnings(suppressMessages(suppressPackageStartupMessages(library( data.table, quietly = TRUE ))))
+if( !require( matrixStats ) ) { install.packages( "matrixStats" ) } ; suppressWarnings(suppressMessages(suppressPackageStartupMessages(library( matrixStats, quietly = TRUE ))))
+if( !require( gridExtra ) ) { install.packages( "gridExtra" ) } ; suppressWarnings(suppressMessages(suppressPackageStartupMessages(library( gridExtra, quietly = TRUE )))) # to organize plots
+if( !require( knitr ) ) { install.packages( "knitr" ) } ; suppressWarnings(suppressMessages(suppressPackageStartupMessages(library( knitr, quietly = TRUE ))))
+options( kableExtra.latex.load_packages = FALSE ) # !! VERY IMPORTNAT !!
+if( !require( kableExtra  ) ) { install.packages( "kableExtra " ) } # DO NOT LOAD !
+```
+
+
+```{r echo = FALSE }
+# ensure there's a 'trained_model_instance' object for the running session :
+if( !exists( "trained_model_instance" ) ) {
+  if( exists( "dev_trained_model_instance" ) ) {
+    #  lazy evaluation ; renames the object without copying it
+    # @see 'https://stackoverflow.com/questions/22951811/how-to-rename-a-variable-in-r-without-copying-the-object'
+    trained_model_instance <- dev_trained_model_instance
+    suppressWarnings( rm( dev_trained_model_instance ) ) # warning raised due to 'scope' difference at report compile time.
+    if( exists( "dev_predictions" ) ) {
+      predictions <- dev_predictions
+      suppressWarnings( rm( dev_predictions ) )
+    } else {
+      predictions <- NULL
+    }
+  } else {
+    trained_model_instance <- NULL
+    predictions <- NULL
+  }
+} else {
+  if( !exists( "predictions" ) ) {
+    predictions <- NULL
+  }
+}
+```
+
+```{r echo = FALSE }
+
+windowsFonts(
+  "Helvetica" = windowsFont( "Helvetica" ) )
+theme_amc <- function( base_size_ = 9 ) {
+  # my custom ggplot2 theme
+  theme_bw( base_size = base_size_
+            , base_family = "Helvetica" ) %+replace% 
+    theme(
+      panel.grid.minor = element_blank(), panel.border = element_blank()
+      , axis.line = element_line( colour = "black" )
+    )
+}
+theme_set( theme_amc() ) # set 'theme_amc' as the 'session' theme
+#theme_set( theme_gray() ) # default ggplot2 theme
+
+```
+
+```{r echo = FALSE }
+empty_message <-
+  paste( "       Please have a trained model in memory\n",
+         "       prior to compiling this report\n",
+         "       (either 'trained_model_instance'\n",
+         "       or 'dev_trained_model_instance')\n",
+         "       and call the 'amc_pdf_print' function" )
+empty_plot <- ggplot() + 
+  annotate( "text", x = 4, y = 25
+            , size = 6.5, fontface = 'italic'
+            , label =
+              paste( "       Empty figure\n"
+                     , empty_message )
+            , color = "blue" ) + 
+  theme( axis.line = element_blank()
+         , axis.text.x = element_blank()
+         , axis.text.y = element_blank()
+         , axis.ticks = element_blank()
+         , axis.title.x = element_blank()
+         , axis.title.y = element_blank()
+         , legend.position = "none"
+         , panel.background = element_blank()
+         , panel.border = element_blank()
+         , panel.grid.major = element_blank()
+         , panel.grid.minor = element_blank()
+         , plot.background = element_blank() )
+empty_table <- data.frame(
+  empty_message =
+    unlist( str_split( 
+              paste( "       Empty table\n"
+                     , empty_message )
+              , "\n" ) ) )
+rm( empty_message )
+```
+
+\newpage
+# Table of Content {.unnumbered}
+\tableofcontents
+\vspace{1.5cm}
+
+## List of Figures {.unnumbered}
+\listoffigures
+\vspace{1.5cm}
+
+## List of Tables {.unnumbered}
+\listoftables
+\newpage
+
+\pagenumbering{arabic} <!-- starts page numbering -->
+
+<!--
+amc_pdf_print()
+-->
+
+# Preamble
+
+\Begin{multicols}{3}
+
+Widespread across the internet, Recommender Agents have the ability to effectively learn user’s interests and help these potential consumers find their way to an ideal product among the vast variety of an offer. Service providers, often marketplaces, rely on them heavily.  
+Their main intended goal is to convert a “browser” into a “buyer” via assisted navigation, ease of use and enhanced user experience. This all brings to higher user retention. Recommending systems also allow detecting opportunities for cross sales and/or suggesting package deals, increasing the value of the average shopping basket.
+
+\columnbreak
+
+Recommending Systems are used by platforms, brands and advertisement agencies to generate improved overall user satisfaction, by making it more likely for each user to find quickly what he/she’s interested in. They are already applied to a variety of industries, ranging from retail and accommodation booking to video streaming, news feeding and even social networks [@socialNetworks]. Recommendation systems have been around for more than 25 years [@firstCollabFiltering]. Ever since, there have been many developments in the field, as for instance contemplated in this contemporary paper&nbsp;: [@twoDecades]. As the **Microsoft Research Lab – Asia** puts it, many efforts are of course continuously being made worldwide to even further develop them [@microsoftResearch] and those are watched closely by marketing and sales professionals eager to remain on top of the wolf pack. Recommender Engines have indeed proven to be very effective Marketing / Targeting tools.
+
+\columnbreak
+
+There are inherent complexities induced by the usage of Recommending Systems. The exciting topic of the ubiquity of recommender systems has for instance been covered by Ms. Lusi Li in her PhD thesis [@marketplaceEconomics] in the context of a dominant e-commerce platform that sells competing products from different manufacturers while simultaneously recommending a subset of these products. Ms. Li therein explores the intra-product-category competition as a function of products complementarity as well as the potential strategic price responses from manufacturers. Her observations are very interesting. You should check them out ! They can obviously be transposed to any industry.
+
+\End{multicols}
+
+
+---
+
+\newpage
+
+<!--
+amc_pdf_print()
+-->
+
+
+# Executive Summary{#executiveSummaryAnchor}
+
+\Begin{multicols}{3}
+
+From 2006 to 2009, Netflix^TM^ sponsored a competition, offering a grand prize of $1,000,000 to the team that could take an offered dataset of over 100 million movie ratings and return recommendations that were 10% more accurate than those offered by the company's existing recommender system. The recommendation system relied on data consisting in a set of users having allotted a rating of up to 5 stars to each movie they had respectively watched. This competition energized the search for new and more accurate algorithms.
+
+The Netflix^TM^ challenge winners were evaluated based on the ***R***oot ***M***ean ***S***quare ***E***rror of their model (***RMSE***)[^id_690].
+For a set of “N” ratings, if we define “$y_u,i$” as the rating for movie “i” by user “u” and denote our prediction with “$\hat{y}_u,i$”, then it can be written as follows[^id_331]&nbsp;:
+$$RMSE = \sqrt{ \frac{1}{N} \sum_{u,i} (y_{u,i} - \hat{y}_{u,i})^2 }$$
+
+\columnbreak
+
+On 21 September 2009, achieving a Test RMSE of 0.8567 stars, accounting for a 10.06% improvement over the original system, gave the victory to the “_**BellKor's Pragmatic Chaos**_” team.  
+A good summary of how the winning algorithm was put together can be read here&nbsp;: [@netflixWinSummary] and a more detailed explanation here&nbsp;: [@netflixBellKorenSolution].
+
+This will be the focus of the present short paper&nbsp;: recommendation systems which, in order to make specific recommendations to users, use ratings that users have given items. Since the original data is not publicly available [@netflixPrivacyLawsuit], we here are going to work on data provided by the online movie recommender service "MovieLens" ('https://movielens.org/'). The entire latest 'MovieLens' dataset can be found online [@movieLensEntireDataset]. To make the computation a little easier, we will use the "10M" version of the 'MovieLens' dataset [@movieLens10MDataset], which consists of *“only”* 10 million ratings applied to 10,000 movies by 70,000 users and which was released in January 2009[^id_546].
+
+\columnbreak
+
+The brief introduction to Recommender Engines in the herein report will adopt characteristics of the model developed by the Netflix^TM^ challenge winning team, such as their original data analysis strategies. We’ll also use the RMSE as our loss function[^id_321].  
+The Netflix^TM^ challenge winners implemented two general classes of models. One was similar to "k-nearest neighbors", where they found "movies" that were similar to each other and "users" that were similar to each other. The other one was based on an approach called "matrix factorization". We'll cover a little of all that in the present document.
+
+\End{multicols}
+
+
+---
+
+\clearpage
+
+[^id_690]: the square root of mean error of the ***L***east ***S***quares ***E***stimates (LSE)
+[^id_331]: variables that are estimates are marked with an hat "$\hat{}$".
+[^id_546]: [@movieLens10MDatasetPaper]
+[^id_321]: meaning, we’ll also develop a model so that it minimizes the RMSE.
+
+<!--
+amc_pdf_print()
+-->
+# A dive into the 'hows'
+
+We’ll start by developing a **linear model** encompassing elements accounting for two different effects. These simple contributions to each individual user/movie rating consist in the fact that&nbsp;:
+
+* on average, to a measurable extend, each given user rates above (or below) the average of users ; a.k.a the "**user effect**"
+* on average, to a measurable extend, each given movie is rated above (or below) the average of movies ; a.k.a the "**movie effect**"
+
+in that model, we’ll employ **regularization** techniques (think "Bayesian adjustments") by optimizing a select group of parameters of our model against the "Penalized Least Square". in layman's terms, we'll penalize (correct against) overly high ratings for movies that have thus far only collected so few ratings that these can not be considered as that representative (and we'll do the same for users which have provided few ratings to date).
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+We’ll then **model the residuals** of that linear model thru reliance over movies **k nearest neighbors** (knn). There are two important aspects to this statement&nbsp;:
+
+* _Nearest neighbors_ models work based on _distances/similarities_[^id_008]. In our case here, for each user, we'll assign ratings to movies based on ratings of _similarly rated_ movies. We'll measure "similarity" depending on how movies "compare" considering ratings distribution. For instance, to simplify, if movie "A" has been rated _3 stars_ by users "1", "2", "3" and "4", then the knn algorithm will predict that same rating to user "5" if all 5 users have rated movie "B" the same (say, _4 stars_).
+* _Residuals_ are the _errors_ of the linear model, i.e. the difference between the predictions of that model and the actual ratings. if a user rates a movie _3.5 stars_ and if the linear model has predicted _3 stars_, then _0.5 stars_ is the _residual_ that will be passed on for the knn model to predict.
+
+Together combined, these two models will constitute our first **stacked ensemble model**. What we're doing here is similar in spirit to _boosting_ as it indeed consists in having a subsequent model focus its prediction on the error (shortcomings) of a prior model. But similarities end there[^id_725]^,^ [^id_827].
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+We’ll also apply a **matrix factorization** technique to the residuals of the initial regularized linear model. Together combined, those two will constitute our second stacked ensemble model.  
+Matrix factorization is the mathematical orthogonal transformation of the matrix of ratings (with movies as columns and users as rows). We'll use _Primary Components Analysis (pca)_ to decompose that matrix in order to achieve **Dimensionality reduction**. Pca allows us to summarize info relative to correlated users (think 'clusters') with a limited number of uncorrelated factors (called "Primary Components"). As an example, lets consider 2 highly correlated users.
+Those 'uncorrelated factors' ; those "Primary Components" can for instance be thought of as characteristics of clusters of movies such as for example&nbsp;:
+
+* whether or not a user appreciates movies directed by Luc BESSON[@lucBesson].
+* whether or not a user appreciates movies starring Jean DUJARDiN[@jeanDujardin].
+* whether or not a user appreciates movies involving a mix of romance and action.
+* etc.
+
+Matrix factorization algorithms permits us to detect patterns between clusters of users and clusters of movies, explaining for the variation without losing too much info (only 'noise') in the true ratings.
+
+[^id_725]: most boosting algorithms consist of iteratively learning weak supervised models and adding them to finally constitute a strong supervised model. When they are added, they are typically weighted in some way that is usually related to the weak learners' accuracy [@boostWiki].
+[^id_827]: model stacking introduced by Kaggle Competitions Grandmaster Marios MICHAILIDIS (KazAnova)&nbsp;: [@stackIntro][@stackIntroYoutube]
+[^id_008]: the similarity measure adopted by the Netflix^TM^ challenge winning team was cosine. For details see the [knn treaining section](#knnAnchor).
+
+\clearpage
+
+<!--
+amc_pdf_print()
+-->
+
+At this stage, we'll end up with the two below stacked model instances&nbsp;:
+
+* Regularized linear  +  knn
+* Regularized linear  +  pca
+
+They will each provide predictions with a certain level of accuracy. To achieve an even better performance globally, we'll apply **bagging ensemble** with these two. Bagging[^id_620] involves averaging predictions in order to counterbalance individual models weaknesses ; achieve better predictive power ; converge towards true ratings.
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+To train all these models, we’ll employ k-fold cross-validation[@crossValidationExplained] as a way to keep us safe from over-fitting[@overfitting] (low bias, high variance). Overfitting is this tendency models can have to reproduce training data too well, follow even variation induced by randomness in the training data and have no predictive power.
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+[^id_620]:historically, Bagging came from the abbreviation of Bootstrap AGGregatING
+
+---
+
+\clearpage
+
+<!--
+amc_pdf_print()
+-->
+
+# For the little geek in you {#technicalAnchor}
+
+Lets get a little technical. its gonna be brief and informative, i promise. I'll try to always remain engaging but if you have no interest in unveiling how to execute, even partly, the prediction procedure here depicted, you can simply skip over this section. There's much fun in reading the rest anyway !
+
+The intent was to provide people with procedures and results that could fully be reproduced by anyone at home without any monetary investment and reliance over cloud computing, as long as they own a relatively modern PC.
+
+The _R_ and _Python_ languages have that in common that objects they are using are hold in virtual memory. They both struggle at dealing natively with large ones. For that reason, the _movielens_ dataset that we employ here, with its 10 million records, is large enough that it requires particular measures to be taken for it to be manageable on a single laptop.  
+At our disposal, a machine hosting a Windows 10 Operating System with an "8th Gen. intel^®^ Core^TM^ i7 processor"[^id_726] (6 cores ; 12 logical processors), 256 GB of SSD storage on the same disk as the one hosting the O.S. and 16 GB of memory[^id_729]. We won't speak of other characteristics such as GPU as it is of no use here.
+
+At its peak, the algorithm put together to generate this report requires a little over 60 gigabytes of memory. To circumvent that constraint, we need to extend the memory capacity for R and this is feasible by first increasing the O.S. paging size as explained here&nbsp;: [@windowsVirtualMemory]&[@windowsPartition].
+if you can, set the maximum memory allocation for R at up to 128 GB. in addition to the above, it must also be informed at the 'R session' level with the below line of code&nbsp;:
+
+```{r echo = TRUE, eval = FALSE } 
+memory.limit( size = 128000 )
+```
+
+On such a large dataset, in order to keep training duration at a manageable level on a laptop as the one depicted above, one has to draw on multi-threading/parallel processing whenever possible too. For matrix arithmetics, a first great level of gain can be achieved via switching from _standard R_ to _Microsoft R Open_ and _intel MKL_[@microsoftRopen][@multithreadingWindows][@whyRslow][@rstudioRversion][@32_64bitsRstudio].  
+It will however not save the day on all circumstances. When looking for performance optimization in R, options generally are 'vectorization' versus 'apply functions' and/or 'for loops' [@vectorization]. _Parallel 'foreach' looping_[^id_312] has for instance been investigated in the context of knn training which was by far the most computationally demanding part of the entire algorithm. However benefitial when working with ditributed systems, such parallel processing requires objects to be duplicated in memory on each thread it is running on, which means memory overload and, mostly, much time spent on reconciliating all sub-results at the end of the line[@foreachSlower][@foreachCombine][@rbindlist]. On non-ditributed systems, this can quickly become an overkill[@errorWrittingToConnection][@errorWrittingToConnection2].
+
+Only when _Rcpp_ has been considered is it that a reasonnable processing time could be achieved for knn training. It litterally permitted to turn hours of training time into minutes.
+The Rcpp package provides an API on top of R, permitting direct interchange of R objects between R and C++[^id_848]. That way, access is given to efficient memory pre-allocation to save from the burden of repetitive objects resizing as well as to the usage of pointers and references (addresses) to save from the hussle of unnecessarily overcrowding the memory. It's fairly easy to jumpstart Rcpp coding thanks to the excellent "**Rcpp for everyone**" by Masaki E. TSUDA[@rcppForEveryone]. These _documentation_ pages put together by the initial and main author of the package, Mr. Dirk EDDELBUETTE, can also be of some assistance&nbsp;: [@rcppSugarFunctions].  
+For the Rcpp package to be usable, a working C++ compiler is also needed in order to build binary packages. On Windows, you can install "Rtools" ('https://cran.r-project.org/bin/windows/Rtools/'). To check wether or not you have a working version of rtools associated to your R session, you can utilize the below R line of code&nbsp;:
+
+```{r eval=FALSE} 
+devtools::find_rtools( debug = TRUE )
+#Either a visible TRUE if rtools is found, or an invisible FALSE with a diagnostic message.
+```
+
+[^id_726]: All product and company names are trademarks^TM^ or registered^®^ trademarks of their respective holders.
+[^id_729]: Gaming laptops are strong and make great Machine Learning platforms.
+[^id_312]: packages used in that context were _foreach_, _parallel_, _doParallel_ and _doSNOW_[@progBarDoPar]
+[^id_848]: to abide by the requirements of this report, the project had to be made up of only 2 R files : one for the report generation itself and one single file for the entire model. The _filecontents_ package from _MiKTeX_ has thus been used to embed the bibliography at the end of this report. Comparatively, the _inline_ R package could be used to embed Rcpp source code inside the model R source file itself. Here, the _Rcpp::sourceCpp_ function sufficed.
+
+<!--
+amc_pdf_print()
+-->
+
+In addition to the above mentionned arrangments, many tricks in the books had to be used to manipulate/operate on large objects efficiently (low memory consumption, fast execution times). For that reason, the entire algorithm has been developped from scratch with two exceptions&nbsp;: where available librairies already provided hard-to-beat performances, namely the _coop_ package for _cosine similarity matrix computation_ and the _stat_ package for _pca primary components decomposition_&nbsp;:
+
+* the coop package[^id_748] is the only one that could be identified as being able to provide a stable cosine similarity matrix computation for cases with _missing values_, i.e. cases like the one we have with the movielens dataset where not all user/movie pairs is assigned a rating. As a side advantage, it is really fast. For the readers eager to learn about any such algorithm inner workings, refer to the excellent post by Rebecca BARTER where we can find a native R version of a "pairwise.complete" matrix computation&nbsp;: [@nativeCosineSimilarity][^id_800].
+* the _stat_ package performs really great in conjunction with _Microsoft R Open_ and _intel MKL_. if you're nevertheless interested in investigating the possibility of developping your own implementation, as a starting point, you can refer to Day 92 of Tomáš Bouda's 100 days of algorithm and his pca algorithm in R&nbsp;: [@pcainRalgo]
+
+Of course, easilly available solutions such as the ones offered by the _recommenderlab_ package already exist. They are however very much craving in terms of memory and, very demanding in terms of processing power (which often translates in unbearably long training times).
+
+Further enhancements can of course still be brought to the algorithm as delivered. It would for instance be an easy win to further extend the resort to Rcpp, or even relate to the _RcppParallel_ package. An other area that has not been explored but which could present advantages relies with _Microsoft MPI_[^id_560] in conjunction with the _Rmpi_ package[@installRmpi].  
+A detailed trace generated during the training of a fully cross-validated final model instance can be found [Appendix C](#appCanchor). It shows progress information together with timing measures.
+
+
+[^id_748]: by order of increasing performance, also considered packages for that job have been _lsa_ and _proxy_.
+[^id_800]: Rebecca BARTER introduces this similarity measure in the context of _Natural Language Processing (NLP)_ as _documents classification_ is an other area in which reliance over cosine similarity is widespread.
+[^id_560]: a Microsoft implementation of the Message Passing interface standard[@mpiStandard] for developing and running parallel applications on a Windows platform.
+
+\clearpage
+
+<!--
+amc_pdf_print()
+-->
+
+
+# Analysis
+
+In the following section we're gonna explain the process and techniques used, such as data exploration and visualization, insights gained, and our modeling approach.
+
+So let's start building this model, shall we ?
+
+---
+
+## K-fold cross validation{#crossValidAnchor}
+
+We can not go any further in this report without dealing first with the concept of **cross validation**.
+
+imagine that a user is in a particulary bad mood. He/she's had a very bad day. Then he/she rates a movie. The rating provided is well below the one that would have been given in any other circumstance.  
+It's for the trained model not to be too influenced by such individual anomalies (outliers) that modern machine learning systematically involves cross-validation via a resampling method such as k-fold[@kfoldVsBootstrap].
+
+Lets picture our dataset for a moment as a french baguette[@frenchBaguette]. We start by putting aside a slice representing 10% of that baguette for latter validation of our final model instance (see [Results section](#resultsAnchor)). With the remaining 90%, lets cut k equal size slices. in our case, as schematized figure \ref{fig:fig_cv} below, we'll make k = 10 ; employ 10-folds in our model cross-validation.  
+We'll train a model instance on 9 slices of _training data_, optimize its hyperparameters against the 10th slice which is used as our _test data_. We do this 10 times, using each time a different slice as our test dataset.
+
+```{r fig_cv, echo = FALSE, fig.height = .9, fig.cap="\\label{fig:fig_cv}Dataset splitting"}
+data.frame(
+  x1 = c( 0, 9, 18, 27, 36, 45, 54
+          , 63, 72, 81, 90 )
+  , x2 = c( 9, 18, 27, 36, 45, 54
+            , 63, 72, 81, 90, 100 )
+  , y1 = rep( 0, 11 )
+  , y2 = rep( 1, 11 )
+  , t = c('a','a','a','a','a','a','a','a','a','a','b')
+  , r = c( 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, "" ) ) %>%
+  ggplot() +
+  geom_rect(
+    mapping =
+      aes(
+        xmin = x1, xmax = x2, ymin =y1, ymax = y2
+        , fill = t
+      )
+    , color = "black"
+    , alpha = .5
+    , show.legend = FALSE ) +
+  geom_text(
+    aes( x = x1 + ( x2 - x1 ) / 2
+           , y = y1 + ( y2 - y1 ) / 2
+           , label = r )
+    , size = 4 ) +
+  scale_x_continuous( expand=c( -1, 101 ) ) +
+  scale_y_continuous(expand=c( 0, 0 ) ) + 
+  theme( axis.line = element_blank()
+         #, axis.text.x = element_blank()
+         , axis.text.y = element_blank()
+         , axis.ticks = element_blank()
+         , axis.title.x = element_blank()
+         , axis.title.y = element_blank()
+         , legend.position = "none"
+         , panel.background = element_blank()
+         , panel.border = element_blank()
+         , panel.grid=element_blank()
+         , plot.background = element_blank() ) +
+  annotate( geom = "text", label = "validation"
+            , x = 95, y = .5, angle = 90
+            , size = 3 )
+```
+
+> Please do kindly bear with me. _Hyperparameters optimization_ simply consists in measuring an optimization metric, in our case the RMSE, for different possible values of a parameter to be tuned in value. Each such value gives a different model RMSE value. The **optimum** value for that parameter is the one which gives the lowest RMSE for our model. We'll come to that in details in the following sections of the report.
+
+
+<!--
+amc_pdf_print()
+-->
+
+## Regularization
+
+### user effect and movie effect
+
+Figure \ref{fig:fig_eff} below shows that (a) not all users rate on average the same and that (b) not all movies get rated on average the same.
+
+```{r fig_eff, echo = FALSE, fig.height = 1.8, fig.cap="\\label{fig:fig_eff}User & Movie effects"}
+if( !is.null( trained_model_instance ) ) {
+  modeled_residuals <-
+    data.table::melt(
+      trained_model_instance$residuals_matrix
+      , na.rm = TRUE
+    )
+  colnames( modeled_residuals ) <-
+    c( "userId", "movieId", "residual" )
+  setDT( modeled_residuals, key = c( "userId", "movieId" ) )
+  rebuilt_ratings <-
+    modeled_residuals[
+      trained_model_instance$user_avgs, on = "userId" ][
+        trained_model_instance$movie_avgs, on = "movieId" ][
+          , -c( "title" ) ][
+            , rating :=
+              trained_model_instance$mu_hat +
+              b_u_hat + b_i_hat + residual
+          ][
+            , -c( "residual", "b_u_hat", "b_i_hat" )
+          ]
+  rm( modeled_residuals )
+  users_avg_ratings_plot <-
+    rebuilt_ratings %>% group_by( userId ) %>% summarize( avg = mean( rating ) ) %>%
+    ggplot( aes( x = avg ) ) +
+    geom_histogram( binwidth = .5
+                    , color = "darkgrey"
+                    , fill = "transparent" ) +
+    xlab( "average rating\n(a)") +
+    ylab( "users count")
+  movies_avg_ratings_plot <-
+    rebuilt_ratings %>% group_by( movieId ) %>% summarize( avg = mean( rating ) ) %>%
+    ggplot( aes( x = avg ) ) +
+    geom_histogram( binwidth = .5
+                    , color = "darkgrey"
+                    , fill = "transparent" ) +
+    xlab( "average rating\n(b)") +
+    ylab( "movies count")
+  rm( rebuilt_ratings )
+
+  grid.arrange(
+    users_avg_ratings_plot
+    , movies_avg_ratings_plot
+    , ncol = 2 )
+  rm( users_avg_ratings_plot, movies_avg_ratings_plot )
+} else {
+  empty_plot
+}
+```
+
+Our linear model of the users/movies ratings allocation can be written down as follows&nbsp; :
+$$\hat{y_{i, u}} = \hat{\mu} + \hat{b_{i}} + \hat{b_{u}}$$
+
+where $\mu$ is the average all all ratings, $b_{i}$ stands for the movie effect for movie "_i_" (e.g. the _"bias"_ for movie "_i_") and  $b_{u}$ stands for the user effect for user "_u_" (e.g. the _"bias"_ for user "_u_"). With such a model, all in all, estimates for the terms $\mu + b_{i} + b_{u}$ equates to our prediction $\hat{ y_{u,i}}$.
+
+And here's how the RMSE equation translates&nbsp;:
+
+$$
+\begin{aligned}
+RMSE &= \sqrt{ \frac{1}{N} \sum_{u,i} (y_{u,i} - (\hat{\mu} + \hat{b_{i}} + \hat{b_{u}}))^2 } \\
+&= \sqrt{ \frac{1}{N} \sum_{u,i} \epsilon_{u,i}^2 }
+\end{aligned}
+$$
+
+Where $\epsilon_{u,i}$ are the _residuals_ to our linear model, i.e. the respective differences between each _true rating_ and our corresponding _prediction_.
+
+<!--
+amc_pdf_print()
+-->
+
+### regularization
+
+As can be seen figure \ref{fig:fig_reg}(a) and (b) below, on the left part of the abscissa axises (x), many users provided little ratings and many movies have few ratings.
+
+```{r fig_reg, echo = FALSE, fig.height = 1.8, fig.cap="\\label{fig:fig_reg}Distribution of ratings"}
+if( !is.null( trained_model_instance ) ) {
+  users_ratings_count_plot <-
+    data.table(
+      x = rowSums( !is.na(
+        trained_model_instance$residuals_matrix
+      ) ) ) %>%
+    ggplot( aes( x = x ) ) +
+    geom_histogram( bins = 100
+                    , color = "darkgrey"
+                    , fill = "transparent" ) +
+    scale_x_log10() +
+    xlab( "ratings count (log10)\n(a)") +
+    ylab( "users count") +
+    ggtitle( "users/ratings distribution")
+  movies_ratings_count_plot <-
+    data.table(
+      x = colSums( !is.na(
+        trained_model_instance$residuals_matrix
+      ) ) ) %>%
+    ggplot( aes( x = x ) ) +
+    geom_histogram( bins = 100
+                    , color = "darkgrey"
+                    , fill = "transparent" ) +
+    scale_x_log10() +
+    xlab( "ratings count (log10)\n(b)") +
+    ylab( "movies count") +
+    ggtitle( "movies/ratings distribution")
+
+  grid.arrange(
+    users_ratings_count_plot
+    , movies_ratings_count_plot
+    , ncol = 2 )
+
+  rm( users_ratings_count_plot, movies_ratings_count_plot )
+} else {
+  empty_plot
+}
+```
+
+From the two above mentioned observations, one can conclude that some ratings are to be considered as more significant/representative than others.
+To the RMSE equation, we can thus add a term as a penalty that gets larger whit large $b_{i}$ and/or $b_{u}$. By doing so, we shrink the coefficient estimates towards zero (no user bias, no movie bias, for non statistically significant records).
+
+$$RMSE_{penalized} = \sqrt{ \frac{1}{N} \sum_{u,i} (y_{u,i} - (\hat{\mu} + b_{i} + b_{u}))^2 \quad + \quad \lambda (\sum_{i} b_{i}^2 + \sum_{u} b_{u}^2) }$$
+Using calculus it can be shown that the values of $b_{i}$ (and $b_{u}$) that minimize this equation are for cases with the number of movies "_i_" per user is larger than $\lambda$ (and the number of users "_u_" per movie is larger than $\lambda$), where $\lambda$ is the _penalization term_ ; the hyperparameter to be optimized during model training.  
+For each of the model instances trained during k-fold cross validation, we'll establish the optimum value of $\lambda$ ; the one minimizing $RMSE_{(\lambda)}$. We'll finally apply the average over these "k" different values for $\lambda$ to our final model. Stay tuned !
+
+
+## K Nearest Neighbors {#knnAnchor}
+
+The final result doesn't look anything like it but this August 2015 **datascience.stackexchange** post by Bartłomiej TWARDOWSKi served as the initial inspiration for the _knn training_ part of the algorithm developped in the frame of the herein report&nbsp;:[@rKnnAlgo].  
+
+There are several popular means of comparing items via measuring distances/similarities[@distSimMeasures]. The Netflix^TM^ challenge winning team went for the **cosine similarity**. The Cosine Similarity between two movies is the computation of the cosine of the angle between two "movie" vectors in the "movies" space&nbsp;:
+
+
+$$
+\begin{aligned}
+similarity( \vv{A}, \vv{B} ) & = cos( \Theta )
+\\
+& = \frac {\vv{A} \cdot \vv{B}}{||\vv{A}|| \cdot ||\vv{B}||}
+\\
+& = \frac{\sum_{i = 1}^N A_i B_i}
+             {\sqrt{\left(\sum_{i = 1}^N A_i^2\right)
+                    \left(\sum_{i = 1}^N B_i^2\right)}}
+\end{aligned}
+$$
+```{r echo = FALSE }
+movies_count <-
+  format( nrow( trained_model_instance$movie_avgs ), nsmall = 1, big.mark = "," )
+users_count <-
+  format( nrow( trained_model_instance$user_avgs ), nsmall = 1, big.mark = "," )
+```
+In a 3D environment (N = 3), it is fairly easy to compute. Both the **A** and **B** vectors have three coordinates.  
+In our case of computing rating similarities among movies, we however are in an environment of **`r movies_count `** dimensions (N = `r movies_count ` different movies)[^id_222].  
+```{r echo = FALSE, results = 'asis' }
+if( is.null( trained_model_instance ) || nrow( trained_model_instance$user_avgs ) > nrow( trained_model_instance$movie_avgs ) ) cat( paste0(
+  "This is for instance why we choose to go with \"movies\" knn here and not \"users\" knn&nbsp;: our dataset englobes **", users_count, "** different users. This would have made computation of the similarities matrix way too long[^id_333]."
+) )
+```
+
+
+```{r echo = FALSE }
+one_movie_column_nb <- 525
+if( !is.null( trained_model_instance ) ) {
+  movie_similar_movies <-
+    trained_model_instance$similarity_matrix[ , one_movie_column_nb ] # [ , movieId == 593 ]
+  0 -> movie_similar_movies[ is.na( movie_similar_movies ) ]
+  movie_similar_movies_plot <-
+    data.frame(
+    x = movie_similar_movies ) %>%
+    ggplot( aes( x = x ) ) +
+    geom_histogram( aes( y = ..count.. )
+                    , binwidth = .25
+                    , fill = "transparent"
+                    , color = "darkgrey" ) +
+    xlab( "similarity" ) +
+    ylab( "movies count" ) +
+    scale_x_continuous(
+      breaks = c( -1, -0.875, -0.625, -0.375, -0.125
+                , 0.125, 0.375, 0.625, 0.875, 1 )
+      , labels = c( "-1", "\n-0.875", "-0.625", "\n-0.375", "-0.125"
+                    , "\n0.125", "0.375", "\n0.625", "0.875", "\n1" )
+      ) +
+    stat_bin( aes( y = ..count..
+                   , label =
+                     format( ..count..
+                             , nsmall = 0
+                             , big.mark = "," ) )
+              , geom="text", vjust=.1
+              , binwidth = .25, size = 8
+              , color = "grey42" )
+  rm( movie_similar_movies )
+
+# trained_model_instance$movie_avgs[ movieId == 593 ]
+# trained_model_instance$movie_avgs[ one_movie_column_nb ]
+} else {
+  movie_similar_movies_plot <- empty_plot
+}
+```
+
+\Begin{wrapfigure}{r}{0.3\textwidth}
+```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high' }
+movie_similar_movies_plot + theme_amc( base_size_ = 28 )
+```
+\caption{\label{fig:movie_similar_movies}Cosine similarity of a movie against all the others}
+\End{wrapfigure}
+
+```{r echo = FALSE }
+rm( movie_similar_movies_plot )
+```
+
+<!--
+amc_pdf_print()
+-->
+
+
+Similarity ranges from -1 (exactly opposite), to 1 (exactly the same), with 0 indicating orthogonality or decorrelation, while in-between values indicate intermediate similarity or dissimilarity.
+
+For instance, for the movie **"`r trained_model_instance$movie_avgs[ one_movie_column_nb ]$title `"**, figure **\ref{fig:movie_similar_movies}** shows the distribution of similarities with each of the `r movies_count ` movies of our dataset[^id_010].  
+Be reminded that we consider residuals from regularized linear modelling of ratings here.
+
+```{r echo = FALSE }
+rm( movies_count, users_count, one_movie_column_nb )
+```
+
+
+[^id_222]: this well known fact is called **curse of dimensionnality**. A very educational explaination of that phenomenon can be found there&nbsp;: [@curseOfDim].
+[^id_333]: it is interesting to note however that, the higher the number of dimensions, the better the accuracy of the knn predictions, since discriminating between user rating profiles is more precise the more different users there are (e.g. the more users there are, the more similar to a particular user are its k closest neighbors). Going with "users" knn modeling would have brought to an increased accuracy.
+[^id_010]: we consider pairwise similarities (see [Little geek section](#technicalAnchor)).
+
+---
+
+<!--
+amc_pdf_print()
+-->
+
+\clearpage
+
+## Primary Components Analysis
+
+```{r echo = FALSE }
+prcomp <- min(
+  20
+  , ifelse( !is.null( trained_model_instance)
+            , trained_model_instance$prcomp_rank
+            , 20 ) )
+prcomp_tab <- min( 15, prcomp )
+sample_users_count <- 80 # 30 # 
+sample_movies_count <- 40 # 25 # 
+```
+
+Matrix factorization is a mathematical method that makes it possible to decompose a matrix into two matrices of lower dimensions[^id_811].
+The variability of the ratings (with users and movies) can thus be decomposed in two matrices&nbsp;: the **weights** matrix and the **pattern** matrix.  
+Included figure \ref{fig:fig_matfac}, we can see a graphical representation of a matrix factorization of a sample[^id_999] from our dataset.
+$$ residuals\_matrix = weights\_matrix * pattern\_matrix^T$$
+
+The principle consists in considering the right amount of variability in the training dataset, meaning isolating and ignoring the part in the variability in the training data that relates purely to randomness so as to ignore it in future predictions. Taking into account the right amount of primary components brings the best ability to predict future observation. This amount also is an hyperparameter to be optimized during model training.
+
+[^id_811]: an other interesting approach than the one adopted in this report to introduce matrix factorization can be found there&nbsp;:[@pcaGuide], with further insights there&nbsp;:[@pcainR].
+[^id_999]: a random sample of ratings for `r sample_users_count` users and `r sample_movies_count` movies, where only the first `r prcomp` primary components are shown.
+
+### The "weights" matrix
+
+The **weights** matrix has _"users count"_ rows and is made up of uncorrelated **primary component** columns, each of which have a decreasing standard deviation (e.g. a decreasing variability). To put it simply, **PC1**, the first primary component, the one with the highest standard deviation, translates the movie characteristic that divides the most among our set of users. Table \ref{tab:sdev_tab} below shows the respective standard deviation of the `r prcomp_tab` first primary components of the entire dataset.
+
+```{r echo = FALSE }
+prcomp <- min(
+  20
+  , ifelse( !is.null( trained_model_instance)
+            , trained_model_instance$prcomp_rank
+            , 20 ) )
+prcomp_tab <- min( 15, prcomp )
+sample_users_count <- 80 # 30 # 
+sample_movies_count <- 40 # 25 # 
+
+if( !is.null( trained_model_instance ) ) {
+  var_explained_df <-
+    t( data.frame(
+      rank = as.character( round( as.integer( 1:prcomp_tab ), 0 ) )
+      , "sdev.percent" = round( trained_model_instance$pca$sdev[ 1:prcomp_tab ], 2 ) ) )
+  knitr::kable(
+    var_explained_df
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:sdev_tab}Primary compnents standard deviation"
+    , row.names = TRUE
+    , align = paste0( rep( "c", prcomp_tab )
+                      , collapse = "" )
+  ) %>%
+    kableExtra::kable_styling(
+      font_size = 8, latex_options = c( "hold_position" ) )
+} else {
+  knitr::kable(
+    empty_table
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:sdev_tab}" ) %>%
+    kableExtra::kable_styling(
+      font_size = 8, latex_options = c( "hold_position" ) ) %>%
+    row_spec( 1:nrow( empty_table ), color = "blue" )
+}
+```
+
+<!--
+amc_pdf_print()
+-->
+
+### The "pattern" matrix
+
+The **pattern** matrix has _"movies count"_ rows and encompasses the relation between each movie and each primary component. it's in the _pattern_ matrix that we can identify clusters of movies. For instance, looking at _PC1_, the first primary component, the one explaining for most of the user ratings variability, we can guesstimate what the most important characteristic within our set of movies is.
+
+```{r echo = FALSE }
+if( !is.null( trained_model_instance ) ) {
+  residuals_pcs <- data.frame(
+     round( trained_model_instance$pca$rotation
+            , digits = 4 )
+    , title = trained_model_instance$movie_avgs$title
+    , stringsAsFactors = FALSE )
+
+  pc_bottom_tab <-
+    residuals_pcs %>%
+    mutate( title = str_trunc(
+      title, 30 ) ) %>%
+    dplyr::select( title, PC1 ) %>%
+    arrange( PC1 ) %>%
+    slice( 1:10 )
+
+  pc_top_tab <-
+    residuals_pcs %>%
+    mutate( title = str_trunc(
+      title, 30 ) ) %>%
+    dplyr::select( title, PC1 ) %>%
+    arrange( desc( PC1 ) ) %>%
+    slice( 1:10 )
+
+  dev_dataset <-
+    ( pc_top_tab$title[ 1 ] ==
+        "independence Day (a.k.a. iD..." )
+} else {
+  pc_bottom_tab <- empty_table
+  pc_top_tab <- empty_table
+  dev_dataset <- FALSE
+}
+```
+
+Table \ref{tab:top_pc1} lists the 10 movies that are on one extreme end of PC1 and table \ref{tab:bottom_pc1} the 10 movies that are on the other. From there, we can interject that it separates `r ifelse( !dev_dataset, "thrillers from disaster films", "'science fiction / superheros' movies from drama" )`[^id_707]
+
+```{r echo = FALSE, results = 'asis' }
+cat( paste0( "\\begin{table}[!htb]
+    \\begin{minipage}{.5\\linewidth}
+    \\centering
+    \\caption{Top 10 PC1 movies}\\label{tab:top_pc1}
+    ", knitr::kable( pc_top_tab
+                     , format = "latex"
+                     , booktabs = TRUE
+                     , linesep = "" ) %>%
+    row_spec( 1:nrow( pc_top_tab )
+              , color = ifelse( !is.null( trained_model_instance )
+                                , "black", "blue" ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8 )
+    , "\\end{minipage}%
+    \\begin{minipage}{.5\\linewidth}
+    \\centering
+    \\caption{Reverse top 10 PC1 movies}\\label{tab:bottom_pc1}
+    ", knitr::kable( pc_bottom_tab
+                     , format = "latex"
+                     , booktabs = TRUE
+                     , linesep = "" ) %>%
+    row_spec( 1:nrow( pc_top_tab )
+              , color = ifelse( !is.null( trained_model_instance )
+                                , "black", "blue" ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8 )
+    , "\\end{minipage} 
+\\end{table}" ) )
+```
+
+Comparatively, with table \ref{tab:top_pc2} and \ref{tab:bottom_pc2}, we can do the same for **PC2**, the second primary component, which then seems to translate the dichotomy in the tastes of our set of users between `r ifelse( !dev_dataset, "'science fiction / superheros' movies and drama", "fantasy movies and 'violence & crimes' movies" )`.
+
+```{r echo = FALSE, results = 'asis' }
+if( !is.null( trained_model_instance ) ) {
+  pc_bottom_tab <-
+    residuals_pcs %>%
+    mutate( title = str_trunc(
+      title, 30 ) ) %>%
+    dplyr::select( title, PC2 ) %>%
+    arrange( PC2 ) %>%
+    slice( 1:10 )
+  pc_top_tab <-
+    residuals_pcs %>%
+    mutate( title = str_trunc(
+      title, 30 ) ) %>%
+    dplyr::select( title, PC2 ) %>%
+    arrange( desc( PC2 ) ) %>%
+    slice( 1:10 )
+  rm( residuals_pcs )
+} else {
+  pc_bottom_tab <- empty_table
+  pc_top_tab <- empty_table
+}
+
+cat( paste0( "\\begin{table}[!htb]
+    \\begin{minipage}{.5\\linewidth}
+    \\centering
+    \\caption{Top 10 PC2 movies}\\label{tab:top_pc2}
+    ", knitr::kable( pc_top_tab
+                     , format = "latex"
+                     , booktabs = TRUE
+                     , linesep = "" ) %>%
+    row_spec( 1:nrow( pc_top_tab )
+              , color = ifelse( !is.null( trained_model_instance )
+                                , "black", "blue" ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8 )
+    , "\\end{minipage}%
+    \\begin{minipage}{.5\\linewidth}
+    \\centering
+    \\caption{Reverse top 10 PC2 movies}\\label{tab:bottom_pc2}
+    ", knitr::kable( pc_bottom_tab
+                     , format = "latex"
+                     , booktabs = TRUE
+                     , linesep = "" ) %>%
+    row_spec( 1:nrow( pc_top_tab )
+              , color = ifelse( !is.null( trained_model_instance )
+                                , "black", "blue" ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8 )
+    , "\\end{minipage} 
+\\end{table}" ) )
+rm( pc_top_tab, pc_bottom_tab )
+```
+
+[^id_707]: subject to interpretation, primary components are obviously varying with different datasets.
+
+<!--
+amc_pdf_print()
+-->
+
+### Variance explained
+
+```{r echo = FALSE }
+if( !is.null( trained_model_instance ) ) {
+  sdev_vectors_list <-
+    lapply( trained_model_instance$cv_k_models %>% select( pca )
+            , function(
+              pca_item ) lapply( pca_item
+                                 , function( pca_item ) pca_item$sdev
+              ) )$pca
+  sdev_table <-
+    data.table( array( unlist(  sdev_vectors_list )
+                          , dim =
+                            c( length( sdev_vectors_list[[ 1 ]] )
+                               , length( sdev_vectors_list ) )
+    ) )
+  colnames( sdev_table ) <-
+    paste0( "fold_"
+            , seq( 1, length( sdev_vectors_list ) ) )
+  rownames( sdev_table ) <-
+    seq( 1 : length( sdev_vectors_list[[ 1 ]] ) )
+  sdev_table <-
+    bind_cols(
+      rank = seq( 1 : length( sdev_vectors_list[[ 1 ]] ) )
+      , sdev_table
+      , avg = rowMeans( sdev_table )
+      , final = trained_model_instance$pca$sdev )
+  rm( sdev_vectors_list )
+  #str( sdev_table )
+  var_explained_df <-
+    sdev_table %>%
+    melt( id = "rank"
+          , variable.name = "model_instance"
+          , value.name = "sdev" ) %>%
+    group_by( model_instance ) %>%
+    mutate( var_explained =
+              cumsum( sdev^2 / sum( sdev^2 ) ) )  %>%
+    ungroup
+  rm( sdev_table )
+} else {
+  var_explained_df <- NULL
+}
+```
+
+The _variance explained_ is the cummulative sum of the standard deviation of all the  primary components. For instance, we can see figure \ref{fig:fig_pca}(a) that it takes the first `r which( var_explained_df$var_explained >= .8 )[ 1 ]` primary components to account for 80% of the variability in our dataset.  
+This figure shows **variance explained** over **rank** for each of the pca model instances of the whole k-fold training process. We can notice there that all `r nrow( trained_model_instance$cv_k_models ) + 2` curves overlay at this magnification. The differences between each of them is not enormous.
+
+```{r fig_pca, echo = FALSE, fig.height = 4, fig.cap="\\label{fig:fig_pca}Variance explained" }
+if( !is.null( trained_model_instance ) ) {
+  var_expl_instances_plot <-
+    var_explained_df %>%
+    ggplot( aes( x = rank
+                 , y = var_explained
+                 , color = model_instance ) ) +
+    scale_y_continuous( limits = c( 0, 1 )
+                        , labels = scales::percent_format() ) +
+    ylab( "variance explained" ) + xlab( "rank\n(a)" ) +
+    theme( legend.justification = c( 0, 1 )
+           , legend.position = c( .7, .9 )
+           , legend.title=element_text( size = 7 )
+           , legend.key.height = unit( 1, "line" ) ) +
+    geom_line( size = .1 )
+
+  mult_format <-
+    function(){ function(x) format( 100 * x, digits = 2 ) }
+  var_expl_avg_final_diff_plot <-
+    var_explained_df %>% select( -"sdev" ) %>%
+    filter( model_instance %in% c( "avg", "final" ) ) %>%
+    group_by( rank ) %>%
+    summarize( diff = diff( var_explained ) ) %>%
+    ggplot( aes( x = rank, y = diff ) ) +
+    # top, right, bottom, left
+    theme( plot.margin = unit( c( 0, 0, 0, 1.5 ), "cm" ) ) +
+    scale_y_continuous( labels = mult_format() ) +
+    ylab( expression(
+      "variance explained - "~
+        bold( "avg" )~" minus "~bold( "final" )~
+        " (percentage points)" ) ) +
+    xlab( "rank\n(b)" ) + geom_line( size = .1 )
+
+  grid.arrange(
+    var_expl_instances_plot
+    , var_expl_avg_final_diff_plot # var_expl_instances_plot # 
+    , ncol = 2 )
+  # print( var_expl_avg_final_diff_plot )
+
+  rm( var_expl_instances_plot, var_expl_avg_final_diff_plot
+      , mult_format, var_explained_df )
+} else {
+  empty_plot
+}
+```
+
+<!--
+amc_pdf_print()
+-->
+
+Figure \ref{fig:fig_pca}(b) shows the spread of _variance explained_ between the _average of all cross-validation folds_ (in our case here, `r nrow( trained_model_instance$cv_k_models )` folds) and our _final trained pca model instance_. However not huge, this spread is not negligible.  
+This is to illustrate a mistake commonly made when using cross-validation. Averaging $\underline{results}$ from cross-validation model instances does not equate to actually training a model on the entire training dataset using the average of k-fold _\underline{\makebox[1.9in][l]{optimal hyperparameters values}}_.
+
+---
+
+<!--
+amc_pdf_print()
+-->
+
+\clearpage
+
+\Begin{landscape}
+
+\newgeometry{left=0cm,right=0cm,top=3cm,bottom=1cm}
+
+```{r echo = FALSE}
+if( !is.null( trained_model_instance ) ) {
+  set.seed( 108587 ) # for reproduceability # 233978 # 250499 # 201603 # 126355 # 
+
+  Z <- trained_model_instance$pca$x
+  sample_users_idx <-
+    sample( 1:nrow( Z ), sample_users_count, replace = FALSE )
+  sample_users_Z <-
+    Z[ sample_users_idx, 1:prcomp ]
+  # trained_model_instance$pca$sdev[ 1:ncol( sample_users_Z ) ]
+  # matrixStats::colSds( Z[ , 1:prcomp ] )
+  rm( Z )
+
+
+  A <- trained_model_instance$pca$rotation
+  sample_movies_idx <-
+    sample( 1:nrow( A ), sample_movies_count, replace = FALSE )
+  sample_movies_A <-
+    A[ sample_movies_idx, 1:prcomp ]
+  rm( A )
+
+  sample_non_na_residuals_matrix <-
+    trained_model_instance$residuals_matrix[ sample_users_idx, sample_movies_idx ]
+  0 -> sample_non_na_residuals_matrix[
+    is.na( sample_non_na_residuals_matrix ) ]
+  # only very few primary components =>
+  # max( abs( sample_non_na_residuals_matrix - as.numeric( !is.na( trained_model_instance$residuals_matrix[ sample_users_idx, sample_movies_idx ] ) ) * ( sample_users_Z %*% t( sample_movies_A ) ) ) )
+
+
+  colnames( sample_non_na_residuals_matrix ) <-
+    str_trunc( trained_model_instance$movie_avgs$title[ sample_movies_idx ], 20 )
+  rownames( sample_non_na_residuals_matrix ) <-
+    trained_model_instance$user_avgs$userId[ sample_users_idx ]
+  sample_ratings <-
+    melt(
+      data.table( useriD = seq( 1:nrow( sample_users_Z ) )
+                  , sample_non_na_residuals_matrix )
+      , id = c( "useriD" ) )
+  range_boundary <-
+    max( matrixStats::rowMaxs( abs(
+      sample_non_na_residuals_matrix ), na.rm = TRUE ) )
+  # Classic palette RdBu, with 11 colors
+  RdBu_pal = RColorBrewer::brewer.pal( 11, "RdBu" ) 
+  # Adding more tones to this palette :
+  # RdBu_pal = colorRampPalette( RdBu_pal )(50)
+  residuals_plot <-
+    sample_ratings %>% ggplot() + xlab( "" ) +
+    theme_amc( base_size_ = 4.5 ) +
+    theme( axis.text.x = element_text( angle = 90, hjust = 1, vjust = .5 ) ) +
+    # scale_x_discrete(
+    #   labels = str_trunc( trained_model_instance$movie_avgs$title[ sample_movies_idx ], 20 ) ) +
+    scale_y_continuous(
+      breaks = 1:length( sample_users_idx )
+      , labels = trained_model_instance$user_avgs$userId[ sample_users_idx ] ) +
+    geom_tile( aes( x = variable, y = useriD
+                    , fill = value )
+               , color = "transparent" ) +
+    scale_fill_gradientn( name = NULL
+                          , colours = RdBu_pal
+                          , limits = c( -range_boundary, range_boundary ) ) +
+    coord_fixed( ratio = 1 ) + # keep ratio fixed on window resize
+    ggtitle( "\"residuals_matrix\"")
+  #residuals_plot
+  rm( range_boundary, RdBu_pal )
+
+  sample_users_weights_melted <-
+    melt(
+      data.frame( useriD = seq( 1:nrow( sample_users_Z ) )
+                  , -1 * sample_users_Z )
+      , id = c( "useriD" ) )
+  residuals_weights_plot <-
+    sample_users_weights_melted %>% ggplot() + xlab( "" ) +
+    theme_amc( base_size_ = 4.5 ) +
+    theme( axis.text.x = element_text( angle = 90, hjust = 1, vjust = .5 ) ) +
+    # top, right, bottom, left
+    theme( plot.margin = unit( c( 0, 0, 0, 1.5 ), "cm" ) ) +
+    scale_y_continuous(
+      breaks = 1:length( sample_users_idx )
+      , labels = trained_model_instance$user_avgs$userId[ sample_users_idx ] ) +
+    geom_tile( aes( x = variable, y = useriD
+                    , fill = value )
+               , color = "transparent" ) +
+    scale_fill_gradientn( name = NULL
+                          , colours = RColorBrewer::brewer.pal( 9, "BuPu" )
+    ) +
+    coord_fixed( ratio = 1 ) + # keep ratio fixed on window resize
+    ggtitle( "Weights matrix (Z)" )
+  #residuals_weights_plot
+
+  pattern_melted <-
+    melt(
+      data.frame( movieId = ordered( rownames( sample_movies_A )
+                                            , rownames( sample_movies_A )[1:nrow( sample_movies_A )] )
+                  , sample_movies_A )
+      , id = c( "movieId" ) )
+  range_boundary <-
+    max( matrixStats::rowMaxs( abs(
+      sample_movies_A ), na.rm = TRUE ) )
+  residuals_transposed_pattern_plot <-
+    pattern_melted %>% ggplot() +
+    scale_x_discrete(
+      labels = gsub( "%", "%%", str_trunc( trained_model_instance$movie_avgs$title[ sample_movies_idx ], 20 ) ) ) +
+    geom_tile( aes( x = movieId
+                    , y = ordered( variable
+                                   , levels = levels( variable )[ nrow( sample_movies_A ):1 ] )
+                    , fill = value )
+               , color = "transparent" ) + ylab( "" ) + xlab( "" ) +
+    scale_fill_gradientn( name = NULL
+                          , colours = RColorBrewer::brewer.pal( 9, "BrBG" )
+                          , limits = c( -range_boundary, range_boundary ) ) +
+    theme_amc( base_size_ = 4.5 ) +
+    theme( axis.text.x = element_text( angle = 90, hjust = 1, vjust = .5 ) ) +
+    coord_fixed( ratio = 1 ) + # keep ratio fixed on window resize
+    ggtitle( expression( atop(
+      paste( "Pattern"^"T" )
+      ,"inverse to the Pattern matrix (A)" ) ) )
+  #residuals_transposed_pattern_plot
+}
+```
+
+```{r fig_matfac, echo = FALSE, fig.height = 8, fig.cap="\\label{fig:fig_matfac}Matrix factorization" }
+if( !is.null( trained_model_instance ) ) {
+  total_width <-
+    ncol( sample_non_na_residuals_matrix ) +
+    ncol( sample_users_Z ) +
+    nrow( sample_movies_A )
+
+  total_width <-
+    sample_movies_count +
+    prcomp +
+    sample_movies_count
+  # grid.arrange( residuals_plot
+  #               , residuals_weights_plot
+  #               , residuals_transposed_pattern_plot
+  #               # , widths = c(
+  #               #   ncol( sample_non_na_residuals_matrix ) / total_width
+  #               #   , ncol( sample_users_Z ) / total_width
+  #               #   , nrow( sample_movies_A ) / total_width )
+  #               , heights = c(
+  #                 1, prcomp / sample_movies_count , 1 )
+  #               # , respect = TRUE  # keep ratio fixed on window resize
+  #               , newpage = TRUE, ncol = 3, nrow = 1 )
+} else {
+  residuals_plot <- empty_plot
+  residuals_weights_plot <- empty_plot
+  residuals_transposed_pattern_plot <- empty_plot
+}
+```
+
+\clearpage
+
+\Begin{figure}
+\Begin{center} 
+
+\Begin{minipage}{.32\linewidth}
+```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high', fig.width=3, fig.height=8}
+residuals_plot
+```
+
+\End{minipage}
+\hfill
+\Begin{minipage}{.32\linewidth}
+```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high', fig.width=3, fig.height = 5}
+residuals_weights_plot
+```
+\End{minipage}
+\hfill
+\Begin{minipage}{.32\linewidth}
+```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high', fig.width=3, fig.height=8}
+residuals_transposed_pattern_plot
+```
+
+\End{minipage}
+
+\caption{\label{fig:fig_matfac}Matrix factorization}
+
+\End{center}
+
+\End{figure}
+
+\restoregeometry
+
+\End{landscape}
+
+
+```{r echo = FALSE }
+if( !is.null( trained_model_instance ) ) {
+  rm( prcomp, sample_users_count, sample_movies_count
+      , sample_non_na_residuals_matrix
+      , sample_users_Z, sample_movies_A
+      , sample_users_idx, sample_movies_idx
+      , sample_users_weights_melted
+      , sample_ratings, pattern_melted
+      , total_width )
+}
+rm( residuals_plot
+    , residuals_weights_plot
+    , residuals_transposed_pattern_plot )
+```
+
+
+<!--
+amc_pdf_print()
+-->
+
+
+# Results {#resultsAnchor}
+
+In this section, we'll go over the respective results of each of the pieces constitutive to our final fully trained model instance.
+
+## Regularization
+
+```{r echo = FALSE }
+if( !is.null( trained_model_instance ) ) {
+  k_models_lambda_optimization <-
+    trained_model_instance$cv_k_models %>%
+    select( cv_fold_name, lambda_optimization ) %>%
+    unnest
+
+  regul_res_plot <-
+    k_models_lambda_optimization %>%
+    ggplot( aes( x = lambda, y = RMSE
+                 , color = cv_fold_name ) ) +
+    geom_line() + # show.legend = FALSE ) +
+    scale_color_discrete( name = NULL ) +
+    geom_vline(
+      xintercept = mean(
+        trained_model_instance$lambda )
+      , size = 1, color = "skyblue3"
+      , linetype = "dashed" )
+} else {
+  regul_res_plot <- empty_plot
+}
+```
+
+\Begin{wrapfigure}{r}{0.3\textwidth}
+```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high' }
+regul_res_plot + theme_amc( base_size_ = 28 )
+```
+\caption{\label{fig:regul_res}Regularization optimization}
+\End{wrapfigure}
+
+```{r echo = FALSE }
+rm( regul_res_plot )
+```
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+Figure \ref{fig:regul_res} shows the different values of the RMSE performance metric for each value of the **lambda** hyperparameter, the penalty term from the regularization algorithm, against which it has been measured at training time.
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+The "non-regularized" linear model corresponds to RMSE for _lambda = 0_. For each of the `r nrow( trained_model_instance$cv_k_models ) ` cross-validation folds, we can observe U curves bottoming out at the optimum lambda value (e.g. the value corresponding to the lowest RMSE).
+
+Table \ref{tab:regul_res_tab} shows these values of the lambda hyperparameter. It also shows the RMSE measures for linear models and regularized linear models, showing how much is gained with optimum regularization.
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+```{r echo=FALSE }
+if( !is.null( trained_model_instance ) ) {
+  regul_res_tab <-
+    cbind(
+      "non-regularized" =
+        ifelse(
+          rep( 0
+               , length( trained_model_instance$cv_k_models$lambda_optimization )
+               ) ==
+            rep( min( k_models_lambda_optimization$lambda )
+                 , length( trained_model_instance$cv_k_models$lambda_optimization
+                           ) )
+          , k_models_lambda_optimization %>%
+              filter( lambda == min( lambda ) ) %>%
+              .$RMSE %>%  round( 4 ) %>% as.character
+          , rep( "TBD", length( trained_model_instance$cv_k_models$lambda_optimization
+                                ) ) )
+      , regularized =
+        k_models_lambda_optimization %>%
+        group_by( cv_fold_name ) %>%
+        summarize( min = min( RMSE ) ) %>%
+        .$min %>%  round( 4 ) %>% as.character
+      , lambda =
+        k_models_lambda_optimization %>%
+        group_by( cv_fold_name ) %>%
+        summarize( min = lambda[ which.min( RMSE ) ] ) %>%
+      .$min %>%  round( 1 ) %>% as.character
+    )
+  rownames( regul_res_tab ) <-
+    k_models_lambda_optimization %>%
+    dplyr::distinct( cv_fold_name ) %>%
+    .$cv_fold_name
+  t( regul_res_tab ) -> regul_res_tab
+
+  knitr::kable(
+    regul_res_tab
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:regul_res_tab}Cross-validation folds - regularized RMSE"
+    , row.names = TRUE
+    , align = paste0( rep( "c", length( trained_model_instance$cv_k_models$lambda_optimization
+                                        ) )
+                      , collapse = "" ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8
+      , latex_options = c( "hold_position" ) ) %>%
+    row_spec( 3, bold = TRUE, italic = TRUE
+              , background = "gray", color = "white" )
+} else {
+  knitr::kable(
+    empty_table
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:regul_res_tab}" ) %>%
+    row_spec( 1:nrow( empty_table ), color = "blue" ) %>%
+  kableExtra::kable_styling(
+    latex_options = c( "hold_position" ) )
+}
+```
+
+From there, we can draw that the optimum **lambda** value to be used for our final trained model is the average value of **`r round( ifelse( !is.null( trained_model_instance ), trained_model_instance$lambda, 0 ), 2 ) `** !
+
+<!--
+amc_pdf_print()
+-->
+
+## K Nearest Neighbors {#knnResultsAnchor}
+
+```{r echo = FALSE }
+if( !is.null( trained_model_instance ) ) {
+  k_models_knn_optimization <-
+    trained_model_instance$cv_k_models %>%
+    select( cv_fold_name, k_optimization ) %>%
+    unnest
+
+  knn_res_plot <-
+    k_models_knn_optimization %>%
+    ggplot( aes( x = k, y = RMSE
+                 , color = cv_fold_name ) ) +
+    geom_line() + # show.legend = FALSE ) +
+    scale_color_discrete( name = NULL ) +
+    geom_vline(
+      xintercept = mean(
+        trained_model_instance$k )
+      , size = 1, color = "skyblue3"
+      , linetype = "dashed" )
+} else {
+  knn_res_plot <- empty_plot
+}
+```
+
+\Begin{wrapfigure}{r}{0.3\textwidth}
+```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high' }
+knn_res_plot + theme_amc( base_size_ = 28 )
+```
+\caption{\label{fig:knn_res}KNN optimization}
+\End{wrapfigure}
+
+```{r echo = FALSE }
+rm( knn_res_plot )
+```
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+Comparatively to regularization optimization, with knn optimization, we end up getting the results reflected figure \ref{fig:knn_res} and table \ref{tab:knn_res_tab}.  
+We can then observe the gains from stacking knn modelling over reularized linear modelling with the corresponding enhancement as observable on the RMSE performance metric.  
+For our final trained model, **k** (the amount of nearest neighbors to be considered for each movie) takes the optimum value averaged from cross validation of **`r ifelse( !is.null( trained_model_instance ), format(trained_model_instance$k, nsmall = 0, big.mark = "," ), "TBD" ) `**.
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+```{r echo=FALSE }
+if( !is.null( trained_model_instance ) ) {
+  knn_res_tab <-
+    cbind(
+      regularized =
+        regul_res_tab[ c( "regularized" ), ]
+      , "regularized + knn" =
+        k_models_knn_optimization %>%
+        group_by( cv_fold_name ) %>%
+        summarize( min = min( RMSE ) ) %>%
+        .$min %>%  round( 4 ) %>% as.character
+      , k =
+        format(
+          k_models_knn_optimization %>%
+            group_by( cv_fold_name ) %>%
+            summarize( min = k[ which.min( RMSE ) ] ) %>%
+            .$min %>% as.integer
+          , nsmall = 1, big.mark = "," )
+    )
+  t( knn_res_tab ) -> knn_res_tab
+
+  knitr::kable(
+    knn_res_tab
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:knn_res_tab}Cross-validation folds - knn RMSE"
+    , row.names = TRUE
+    , align =
+      paste0( rep( "c"
+                   , length( trained_model_instance$cv_k_models$k_optimization
+                   ) )
+              , collapse = "" ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8, latex_options = c( "hold_position" ) ) %>%
+    row_spec( 3, bold = TRUE, italic = TRUE
+              , background = "gray", color = "white" )
+} else {
+  knitr::kable(
+    empty_table
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:knn_res_tab}" ) %>%
+    row_spec( 1:nrow( empty_table ), color = "blue" ) %>%
+  kableExtra::kable_styling(
+    latex_options = c( "hold_position" ) )
+}
+```
+
+<!--
+amc_pdf_print()
+-->
+
+\clearpage
+
+## Primary Components Analysis
+
+```{r echo = FALSE }
+if( !is.null( trained_model_instance ) ) {
+  k_models_pca_optimization <-
+    trained_model_instance$cv_k_models %>%
+    select( cv_fold_name, prcomp_rank_optimization ) %>%
+    unnest
+
+  pca_res_plot <-
+    k_models_pca_optimization %>%
+    ggplot( aes( x = prcomp_rank, y = RMSE
+                 , color = cv_fold_name ) ) +
+    geom_line() + # show.legend = FALSE ) +
+    scale_color_discrete( name = NULL ) +
+    geom_vline(
+      xintercept = mean(
+        trained_model_instance$prcomp_rank )
+      , size = 1, color = "skyblue3"
+      , linetype = "dashed" )
+} else {
+  pca_res_plot <- empty_plot
+}
+```
+
+\Begin{wrapfigure}{r}{0.3\textwidth}
+```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high' }
+pca_res_plot + theme_amc( base_size_ = 28 )
+```
+\caption{\label{fig:pca_res}PCA optimization}
+\End{wrapfigure}
+
+
+```{r echo = FALSE }
+rm( pca_res_plot )
+var_explained <-
+  cumsum( trained_model_instance$pca$sdev^2 /
+            sum( trained_model_instance$pca$sdev^2 ) )
+```
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+The optimum value for the _primary component rank_ (the hyperparameter **prcomp_rank**) for our final model is **`r  trained_model_instance$prcomp_rank`**. Interestingly, looking back at figure \ref{fig:fig_pca}, we see that it accounts for only `r scales::percent( var_explained[ trained_model_instance$prcomp_rank ], accuracy = 1 )` of the variability in the residuals to our regularized linear model[^id_575].
+
+```{r echo = FALSE }
+rm( var_explained )
+```
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+```{r echo=FALSE }
+if( !is.null( trained_model_instance ) ) {
+  pca_res_tab <-
+    cbind(
+      regularized =
+        regul_res_tab[ c( "regularized" ), ]
+      , "regularized + pca" =
+        k_models_pca_optimization %>%
+        group_by( cv_fold_name ) %>%
+        summarize( min = min( RMSE ) ) %>%
+        .$min %>%  round( 4 ) %>% as.character
+      , prcomp_rank =
+        k_models_pca_optimization %>%
+        group_by( cv_fold_name ) %>%
+        summarize( min = prcomp_rank[ which.min( RMSE ) ] ) %>%
+        .$min %>% as.integer
+    )
+  t( pca_res_tab ) -> pca_res_tab
+
+  knitr::kable(
+    pca_res_tab
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:pca_res_tab}Cross-validation folds - pca RMSE"
+    , row.names = TRUE
+    , align = paste0( rep( "c", length( trained_model_instance$cv_k_models$prcomp_rank_optimization
+                                        ) )
+                      , collapse = "" ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8, latex_options = c( "hold_position" ) ) %>%
+    row_spec( 3, bold = TRUE, italic = TRUE
+              , background = "gray", color = "white" )
+} else {
+  knitr::kable(
+    empty_table
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:pca_res_tab}" ) %>%
+    row_spec( 1:nrow( empty_table ), color = "blue" ) %>%
+  kableExtra::kable_styling(
+    latex_options = c( "hold_position" ) )
+}
+```
+
+```{r echo=FALSE }
+if( !is.null( trained_model_instance ) ) rm( regul_res_tab )
+```
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+[^id_575]: such a low coverage for the variability of the data could be attributed to the fact that, contrarily to what we've done with the knn modelling, with pca modelling, to missing values (user/movie pairs with no rating) we've attributed a **0 (zero)** residual value (e.g. an average between all ratings from that user and all ratings for that movie), which is a stance / a parti pris.
+
+<!--
+amc_pdf_print()
+-->
+
+## Bagging
+
+```{r echo = FALSE }
+if( !is.null( trained_model_instance ) ) {
+  k_models_rel_prop_optimization <-
+    trained_model_instance$cv_k_models %>%
+    select( cv_fold_name, rel_prop_optimization ) %>%
+    unnest
+
+  rel_prop_res_plot <-
+    k_models_rel_prop_optimization %>%
+    ggplot( aes( x = rel_prop, y = RMSE
+                 , color = cv_fold_name ) ) +
+    geom_line() + # show.legend = FALSE ) +
+    scale_color_discrete( name = NULL ) +
+    geom_vline(
+      xintercept = mean(
+        trained_model_instance$rel_prop )
+      , size = 1, color = "skyblue3"
+      , linetype = "dashed" )
+} else {
+  rel_prop_res_plot <- empty_plot
+}
+```
+
+\Begin{wrapfigure}{r}{0.3\textwidth}
+```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high' }
+rel_prop_res_plot + theme_amc( base_size_ = 28 )
+```
+\caption{\label{fig:rel_prop_res}KNN optimization}
+\End{wrapfigure}
+
+```{r echo = FALSE }
+rm( rel_prop_res_plot )
+```
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+As can be observed on below table \ref{tab:rel_prop_res_tab}, combining _regularization + knn_ on one hand and _regularization + pca_ on the other always brings to enhanced results compared to the ones obtained with either of both alone.  
+Optimized during cross validation, the relative weights each model instance takes in the mix is characterized by the **rel_prop** hyperparameter.  
+In our final model, when the result of the _regularization + knn_ model is assigned a weight of **1**, the result of the _regularization + pca_ model is assigned a weight of **rel_prop = `r ifelse( !is.null( trained_model_instance ), round( trained_model_instance$rel_prop, 3 ), "TBD" ) `**.
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+```{r echo=FALSE }
+if( !is.null( trained_model_instance ) ) {
+  rel_prop_res_tab <-
+    cbind(
+      "regularized + knn" =
+        knn_res_tab[ c( "regularized + knn" ), ]
+      , "regularized + pca" =
+        pca_res_tab[ c( "regularized + pca" ), ]
+      , "bagging" =
+        k_models_rel_prop_optimization %>%
+        group_by( cv_fold_name ) %>%
+        summarize( min = min( RMSE ) ) %>%
+        .$min %>%  round( 4 ) %>% as.character
+      , rel_prop =
+        k_models_rel_prop_optimization %>%
+        group_by( cv_fold_name ) %>%
+        summarize( min = rel_prop[ which.min( RMSE ) ] ) %>%
+        .$min %>%  round( 1 ) %>% as.character
+    )
+  t( rel_prop_res_tab ) -> rel_prop_res_tab
+
+  knitr::kable(
+    rel_prop_res_tab
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:rel_prop_res_tab}Cross-validation folds - bagging RMSE"
+    , row.names = TRUE
+    , align = paste0( rep( "c", length( trained_model_instance$cv_k_models$prcomp_rank_optimization
+                                        ) )
+                      , collapse = "" ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8, latex_options = c( "hold_position" ) ) %>%
+    row_spec( 4, bold = TRUE, italic = TRUE
+              , background = "gray", color = "white" )
+} else {
+  knitr::kable(
+    empty_table
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:rel_prop_res_tab}" ) %>%
+    row_spec( 1:nrow( empty_table ), color = "blue" ) %>%
+  kableExtra::kable_styling(
+    latex_options = c( "hold_position" ) )
+}
+```
+
+```{r echo=FALSE }
+if( !is.null( trained_model_instance ) )
+  rm( knn_res_tab, pca_res_tab, rel_prop_res_tab )
+```
+
+\clearpage
+
+<!--
+amc_pdf_print()
+-->
+
+## Validation dataset
+
+The overall objective to training a machine learning algorithm of course resides in being able to generate predictions.
+
+
+On the validation dataset[^id_897], we managed to reach an RMSE of `r predictions$RMSE$weighted`.
+
+
+```{r echo=FALSE }
+if( !is.null( predictions ) ) {
+  knitr::kable(
+    round( predictions$RMSE, 4 )
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:predic_tab}final model instance - RMSE on validation dataset"
+    , align = paste0( rep( "c", ncol( predictions$predictions )
+                           , collapse = "" ) ) ) %>%
+    kableExtra::kable_styling(
+      font_size = 8, latex_options = c( "hold_position" ) )
+} else {
+  knitr::kable(
+    data.frame(
+      empty_message =
+        unlist( str_split( 
+          paste( "       Empty table\n"
+                 , "       Please have a prediction in memory\n"
+                 , "       prior to compiling this report\n"
+                 , "       (either 'predictions' or 'dev_predictions')\n"
+                 , "       and call the 'amc_pdf_print' function" )
+          , "\n" ) ) )
+    , format = "latex", booktabs = TRUE
+    , caption = "\\label{tab:predic_tab}" ) %>%
+    row_spec( 1:5, color = "blue" ) %>%
+  kableExtra::kable_styling(
+    latex_options = c( "hold_position" ) )
+}
+```
+
+We did cover many aspects of the algorithm that won the Grand Prize from the Netflix^TM^ challenge. For simplicity, many other (secondary) characteristics have been left aside, for instance no consideration has been given to time variations such as the fact that users become harsher critics over time.
+
+> DISCLAIMER: In the context of the Netflix^TM^ challenge, the final RMSE was higher than the one we obtain here despite the fact that that other dataset had 10 times more records than us but, no conclusion can't be drawn as long as we don't have accesss to the original dataset.
+
+
+
+
+[^id_897]: we saved 10% of the source dataset for validation purposes. The Model has been developed (trained/tested) on the remaining 90% (see the [cross-validation section](#crossValidAnchor)).
+
+<!--
+amc_pdf_print()
+-->
+
+\clearpage
+
+# Conclusion / Discussion
+
+From its open Grand Contest, Netflix^TM^ did adopt one solution which brought a 8.43% improvement in RMSE, but not the Grand Prize winner, which delivered over 10% improvement over the existing in-house solution as required.  
+Simply put, the additional 1.57% difference was not deemed meaningful enough, given the additional engineering work it required to put it in production. This brought some quite intense badmouthing on crowded R&D in the media[@crowdRnD], but there's good to take in everything and Netflix gained much from this experiment of theirs&nbsp;: the collectively spent hours amounted to much more than the awarded monetary prize AND, they learnt a lot[@matlabNetflixML].
+
+Netflix^TM^ had launched the challenge in 2006 and the prize was awarded when a team finally reached the challenged critera of 10% improvement in RMSE three years later in 2009. By then, Netflix^TM^ had moved away from DVD renting to enter the movie streaming  buisiness.  
+This move changed the way recommendations should be delivered and how user preferences were estimated. With DVD, they could primarily rely on explicit ratings users gave. With streaming, they could use click/stream data[@clickStreamReco] and other online behavior to figure out what users actually liked, and what they didn't.  
+This change of business model also implied that they needed a system more responsive to user real time interactions. To abide by these constraints, several hybrid systems emerged, notably LCARS (or Location-Content-Aware Recommender System)[@lcars] and other context-aware systems.
+
+That being said, collaborative filtering recommender engines like the one covered in the herein report are still a very relevant and predominant part of the mix. Personnalizations based on preferences is a modern golden mine. They are the reason why data is so valuable in the modern age. KYC (Know Your Customer) is any startup's obsession nowadays and is at the center of most companies' digital transformation.  
+In an era where everything that is Machine Learning related changes so quickly and where new technological trends emerge every so often, the challenges recommendation systems have to face are however numerous&nbsp;:
+
+* Trust – A recommender system is of little value for a user if the user does not trust the system. Trust can be built by a recommender system by explaining how it generates recommendations, and why it recommends an item.  
+At the moment, **models explainability** is of the essence. Machine Learning algorithms currently suffer from an "acceptability" problem. They are often perceived as black boxes, which is one of the main reason why they don't really take off in companies with an already established business. Decision makers require/need transparency in order to rely on a solution. That's why some serious educational wisdom needs to be dropped into the communication of machine learning practioners who need not be put on a pedestal.
+
+* Cold Start - a typical recommendation system dilema is associated to the early situation when the system cannot draw any inference for a user or item about which it has not yet gathered sufficient information. For a user that has never before rated any movie, user demographics is for instance often used as a fallback to identify cluster of users to which he/she belongs[@coldStart].
+
+* Scalability - bringing an algorithm into production conditions, with dataset made up of billions of records sometimes increasing at millions-a-day pace, is a reccurent real-world constraint on adoption. Cloud computing service providers dependency and the effect of related invoices on a business bottom line are both increasingly scrutinized.
+
+* Privacy - The topic of users/consumers data privacy did not await the 21^st^ century to emerge, with for example the creation by France in January 1978 of a dedicated surveillance commission&nbsp;: the "_Commission nationale de l'informatique et des libertés_" (CNIL)[@cnilWiki][@cnil][@cnilGlossary]. The issue of course slipped rapidly into recommendation systems when they emerged[@privacy], [@norwayPrivacy]. Europe has been pioneering on the legislative front with major concerns such as **data ownership** and **data protection**, with the adoption in April 2016 of the "_EU General Data Protection Regulation_" (GDPR)[@euGdpr]. Countries outside the E.U. show growing awareness and sensitivity towards these matters, like for instance the U.S. which are yet to pass such a law but the state of California went ahead in June 2018 by passing into law the so called "_California Consumer Privacy Act_"[@ccpa][@dojCcpa].
+
+* Diversity - Last but not least, the ethical question of exposure diversity commands itself. Should recommendation systems only care about people’s past behavior and popular demand ? Aren't content quality and diversity also essential ? These issues shall always remain central to the debate on building a better tomorrow[@exposureDiversity][@techDiversityPb].
+
+As already contemplated earlier in this report, the strength of recommendation are numerous ; it builds up user retention, allows room for cross sales with paired recommendations, etc[@recoBusinessValue]. There have also been many studies on the economical effect of recommender engines, such as the one reflected in this engaging research paper by the Department of Economics from YALE University on buyers segmentation based on willingness to pay less for uncertainty in trying a new product: [@yaleRecoBuyersSegment].  
+A/B testing is super trendy as a seamless method used to introduce new functionalities and improve the user experience. It consists in steering different variations of a feature towards subsets of users and then measuring which of these variations brings better performance[^id_128]. At the age of the Internet, companies continuously more try to experiment with flexibility, adopt a "trial and error" attitude, fail faster and rebound at lower cost but staying safe from the fear to innovate.  
+Recommender engines are not immune from that agile philosophy. We can only welcome such a development.
+
+
+[^id_128]: which performance has often has to do with user conversion rate (from "browser" to "buyer").
+
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+---
+
+\clearpage
+
+<!--
+amc_pdf_print()
+-->
+
+
+<!--
+Achieved an Overall Accuracy of `r params$overallAccuracy`  
+
+`r params$a_vector`
+
+```{r a_vector}
+params$a_vector
+# R-Comment
+```
+> INDENT
+
+
+blabla blabla and... voilà!
+
+On a Validation dataset, we will manage to reach an Overall Accuracy of `r params$overallAccuracy`, for an RMSE of `r params$rmse`.
+
+
+```{r error_aaaa, error=TRUE, results=FALSE}
+# no interupting of the pdf-compile time due to error for unknown variable "aaaa"
+sum( aaaa )
+```
+-->
+
+
+<!--
+amc_pdf_print()
+-->
+
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+\Vspace{3.5in}
+
+\Begin{center}
+
+# Appendices {.unnumbered}
+
+\End{center}
+
+\newpage
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+\Vspace{3.5in}
+
+\Begin{center}
+
+## Appendix A {#appAanchor .unnumbered}
+
+\End{center}
+
+\newpage
+
+Provided with the algorithm put together in order to generate this report is a set of fully working examples. Placed within _**## Not run:**_ / _**## End(Not run)**_ tags, they allow for fully running code lines using the functions described [Appendix B](#appBanchor).
+
+One can for instance get a single instance from one cross-validation fold, one can call the **get_model_instance** function&nbsp;
+```{r echo = TRUE, eval = FALSE }
+a_model <- get_model_instance(
+  dataset = edx
+  , dataset_test_idx = folds[[ f ]]
+  , lambdas = seq( 0, 6, .1 )
+  , ks = c( 2, seq( 50, 2000, by = 50 )
+            , seq( 2000, 2500, by = 10 ) )
+  , prcomp_ranks = c( 1, 10, 20, 40
+                      , seq( 47, 55, 1 ), 70, 85 )
+  , rel_prop = c( seq( .1, 1, by = .1 )
+                  , seq( 1.5, 6, by = .5 )
+                  , seq( 7, 10 ) )
+  , print_comments = TRUE )
+```
+
+
+To get a fully cross-validated final model instance, one can make a call to the **get_cv_model_instance** function&nbsp;:
+```{r echo = TRUE, eval = FALSE }
+trained_model_instance <- get_cv_model_instance(
+  dataset = edx
+  , cv_folds_count = 10 
+  , lambdas = seq( 0, 6, .1 )
+  , ks = c( 2, seq( 50, 2000, by = 50 )
+            , seq( 2000, 2500, by = 10 ) )
+  , prcomp_ranks = c( 1, 10, 20, 40
+                      , seq( 47, 55, 1 ), 70, 85 )
+  , rel_props = c( seq( .1, 1, by = .1 )
+                   , seq( 2, 6, by = .5 ), seq( 7, 10 ) )
+  , print_comments = TRUE )
+```
+A detailed trace as generated by such a call is provided [Appendix C](#appCanchor). On a computer comparable to the one described in the [Little geek section](#technicalAnchor), it take a little under 40 hours to train.
+
+To generate predictions, a user can then make a call to the **model_predict** function&nbsp;:
+```{r echo = TRUE, eval = FALSE }
+predictions <-
+  model_predict( trained_model_instance =
+                    trained_model_instance
+                 , validation_set =
+                    validation[ , c( "userId", "movieId" ) ]
+                 , true_ratings =
+                    validation[ , c( "rating" ) ]
+                 , print_comments = TRUE )
+```
+
+
+Alternatively, the same can also be done on a small subset of the data, called **dev_subset** (and its associated **dev_validation**). This subset, also provided, corresponds to a sample piece of the entire dataset, made up of _"only"_ ratings from a select 500 users.  
+On a computer comparable to the one described in the [Little geek section](#technicalAnchor), it take a little over 1 hour to train a fully cross-validated model using the "lambdas" "ks", "prcomp_ranks" and "rel_props" ranges provided in the corresponding example sections.
+
+
+\newpage
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+\Vspace{3.5in}
+
+\Begin{center}
+
+## Appendix B {#appBanchor .unnumbered}
+
+List of functions developped to constitute the algorithm that comes along with the herein report.
+
+\End{center}
+
+\newpage
+
+### amc_pdf_print {.unnumbered}
+
+```{r echo = TRUE}
+## ###############################################
+##         'amc_pdf_print' function             ##
+##################################################
+# convenience method to print the pdf report     #
+# with (optional) input parameters.              #
+# In addition, allows to access                  #
+# 'global environment' variables from within     #
+# the 'report printing' session (thus avoiding   #
+# to train a model each time).                   #
+##################################################
+```
+
+### RMSE {.unnumbered}
+
+```{r echo = TRUE}
+## ########################################
+## 'RMSE' function                       ##
+###########################################
+# a function that computes the "RMSE"     #
+# for vectors of "ratings"                #
+# and their corresponding "predictions" : #
+# REMINDER: we're optimizing our model    #
+#           against the RMSE metric.      #
+###########################################
+```
+
+### to_rating {.unnumbered}
+
+```{r echo = TRUE}
+## ##################################################
+## 'to_rating' function                            ##
+#####################################################
+# converts continuous values to 'stars rating' unit #
+# movilens ratings ranging from "0.5" to "5" stars  #
+#####################################################
+```
+
+### duration_string {.unnumbered}
+
+```{r echo = TRUE}
+## #######################################################
+## 'duration_string' function                           ##
+##########################################################
+# convenience method to custom-format duration strings   #
+##########################################################
+```
+
+### get_regularization_optimization {.unnumbered}
+
+```{r echo = TRUE}
+## #######################################################
+## 'get_regularization_optimization' function           ##
+##########################################################
+# optimization procedure for the hyperparameter "lambda" #
+# (regularization penalty term)                          #
+##########################################################
+# inputs :                                               #
+#    - "train_set" - the source data :                   #
+#      user/movie ratings in tidy format                 #
+#      with the following column names :                 #
+#         o "userId", "movieId", "title", "rating"       #
+#    - "test_set" data points used                       #
+#      to generate predictions (to be compared           #
+#      against 'true ratings'                            #
+#    - "lambdas" list of different values                #
+#      to be considered for "lambda"                     #
+#      (primary components count)                        #
+#    - "print_comments" do (or not) show                 #
+#      progress info on the console                      #
+##########################################################
+# resultset (list of objects) :                          #
+#    - "mu_hat", "movie_avgs" and "user_avgs"            #
+#      regularization parameters                         #
+#    - "lambda" - the optimum parameter value            #
+#    - "lambda_optimization"                             #
+#      the "RMSE" versus "k" dataset                     #
+##########################################################
+```
+
+### get_regularization_residuals_matrix {.unnumbered}
+
+```{r echo = TRUE}
+## #################################################
+## 'get_regularization_residuals_matrix' function ##
+####################################################
+# inputs :                                         #
+#    - "train_set" - the source data :             #
+#      user/movie ratings in tidy format           #
+#      with the following column names :           #
+#         o "userId", "movieId", "rating"          #
+#    - "mu_hat", "movie_avgs" and "user_avgs" ;    #
+#      the Regularization parameters               #
+#    - "print_comments" do (or not) show progress  # 
+#      info on the console                         #
+####################################################
+# resultset : a matrix made up of the user/movie   #
+# rating residuals (e.g. the error/loss from       #
+#  the Regularization)                             #
+####################################################
+```
+
+### get_knn_predictions {.unnumbered}
+
+```{r echo = TRUE}
+## ####################################################
+## 'get_knn_predictions' function                    ##
+#######################################################
+#                 Rcpp implementation                 #
+# for each "userId"/movieId" pair of the test domain, #
+# returns one rating prediction                       #
+# per value of the "ks" vector                        #
+#       (Rcpp function called inside                  #
+#        the R 'get_knn_optimization' function)       #
+#######################################################
+# inputs :                                            #
+#    - "ks" list of different values                  #
+#      to be considered for "k" (neighbors count)     #
+#    - "test_sim_matrix" similarity matrix            #
+#      for the "test" movies (one per column)         #
+#    - "test_ratings_matrix" rating matrix            #
+#      for the "test" users, all movies included      #
+#      (from which "neighbor" ratings are picked)     #
+#    - "test_domain" list of "userId"/movieId" pairs  #
+#      (for which a prediction is expected)           #
+#    - "print_comments" do (or not) show              #
+#      progress info on the console                   #
+#######################################################
+# resultset (tidy format ; 4 columns) :               #
+#    - "userId"                                       #
+#    - "movieId"                                      #
+#    - "k"                                            #
+#    - "prediction"                                   #
+#######################################################
+```
+
+### get_knn_optimization {.unnumbered}
+
+```{r echo = TRUE}
+## #######################################################
+## 'get_knn_optimization' function                      ##
+##########################################################
+#    optimization procedure for the hyperparameter "k"   #
+##########################################################
+# inputs :                                               #
+#    - "train_rating_residuals_matrix" similarity matrix #
+#      for the "residual ratings"                        #
+#      (remainder after "Regularization")                #
+#      on the "training" dataset                         #
+#    - "ks" list of different values                     #
+#      to be considered for "k" (neighbors count)        #
+#    - "test_set" data points used                       #
+#      to compare predictions against 'true ratings'     #
+#    - "mu_hat", "movie_avgs" and "user_avgs"            #
+#      regularization parameters                         #
+#    - "print_comments" do (or not) show                 #
+#      progress info on the console                      #
+##########################################################
+# resultset (list of objects) :                          #
+#    - "similarity_matrix"                             #
+#     the movies cosine similarity matrix                #
+#    - "k" - the optimum parameter value                 #
+#    - "k_optimization" - the "RMSE" versus "k" dataset  #
+#    - "predicted_ratings"                               #
+#      the optimized predictions in tidy format          #
+#      with colnames "userId", "movieId" and "pred"      #
+##########################################################
+```
+
+### get_pca_optimization {.unnumbered}
+
+```{r echo = TRUE}
+## ############################################################
+## 'get_pca_optimization' function                           ##
+###############################################################
+# optimization procedure for the hyperparameter "prcomp_rank" #
+###############################################################
+# inputs :                                                    #
+#    - "train_rating_residuals_matrix" similarity matrix      #
+#      for the "residual ratings"                             #
+#      (remainder after "Regularization")                     #
+#      on the "training" dataset                              #
+#    - "prcomp_ranks" list of different values                #
+#      to be considered for "prcomp_ranks"                    #
+#      (primary components count)                             #
+#    - "test_set" data points used                            #
+#      to compare predictions against 'true ratings'          #
+#    - "mu_hat", "movie_avgs" and "user_avgs"                 #
+#      regularization parameters                              #
+#    - "print_comments" do (or not) show                      #
+#      progress info on the console                           #
+###############################################################
+# resultset (list of objects) :                               #
+#    - "pca" - the primary components decomposition object    #
+#      (of class "prcomp")                                    #
+#    - "prcomp_rank" - the optimum parameter value            #
+#    - "prcomp_rank_optimization"                             #
+#      the "RMSE" versus "prcomp_rank" dataset                #
+#    - "predicted_ratings"                                    #
+#      the optimized predictions in tidy format               #
+#      with colnames "userId", "movieId" and "pred"           #
+###############################################################
+```
+
+### get_model_instance {.unnumbered}
+
+```{r echo = TRUE}
+## ##############################################
+## 'get_model_instance' function               ##
+#################################################
+# optimization procedure for the set of         #
+# hyperparameters of our recommender system,    #
+# which consists in Regularization, KNN and PCA #
+#  => "lambda", "k" and "prcomp_rank"           #
+#################################################
+# inputs :                                      #
+#    - "dataset" - the source data :            #
+#      user/movie ratings                       #
+#      to be provided in tidy format            #
+#      with the following column names :        #
+#         o "userId", "movieId", "rating"       #
+#    - "dataset_test_idx"                       #
+#      row numbers of 'dataset'                 #
+#      to be considered for testing             #
+#      (the remainder for training)             #
+#    - "lambdas" list of different values       #
+#      to be considered for "lambda"            #
+#      (penalty term)                           #
+#    - "ks" list of different values            #
+#      to be considered for "k"                 #
+#      (neighbors count)                        #
+#    - "prcomp_ranks" list of different values  #
+#      to be considered for "prcomp_rank"       #
+#      (primary components count)               #
+#    - "rel_props" list of different values     #
+#      to be considered for "rel_prop"          #
+#      (relative proportion on the final result #
+#       of the weight PCA predictions over      #
+#       those of the KNN prediction)            #
+#    - "print_comments" do (or not) show        #
+#      progress info on the console             #
+#################################################
+# resultset (list of objects) :                 #
+#                                               #
+#    - "lambda" - the optimum parameter value   #
+#    - "mu_hat", "movie_avgs" and "user_avgs"   #
+#      the regularization parameters            #
+#    - "residuals_matrix" - "residual ratings"  #
+#      (remainder after "Regularization")       #
+#                                               #
+#    - "similarity_matrix"                    #
+#      the movies cosine similarity matrix      #
+#    - "k" - the optimum parameter value        #
+#    - "k_optimization"                         #
+#      the "RMSE" versus "k" dataset            #
+#                                               #
+#    - "pca" - the primary components           #
+#      decomposition object                     #
+#      (of class "prcomp")                      #
+#    - "prcomp_rank"                            #
+#      the optimum parameter value              #
+#    - "prcomp_rank_optimization"               #
+#      the "RMSE" versus "prcomp_rank" dataset  #
+#                                               #
+#    - "rel_prop"                               #
+#      the optimum parameter value              #
+#    - "rel_prop_optimization"                  #
+#      the "RMSE" versus "rel_prop" dataset     #
+#                                               #
+#    - "predicted_ratings"                      #
+#      the optimized predictions                #
+#      in tidy format  with colnames            #
+#      "userId", "movieId" and "pred"           #
+#                                               #
+#################################################
+```
+
+### get_cv_model_instance {.unnumbered}
+
+```{r echo = TRUE}
+## ##############################################
+## 'get_cv_model_instance' function           ##
+#################################################
+#   a "cross-validated" mixed model instance    #
+#  (k-fold validation on "regularized knn/pca   #
+#               weighted" modelling)            #
+#################################################
+# inputs :                                      #
+#    - "dataset" - the source data :            #
+#      user/movie ratings                       #
+#      to be provided in tidy format            #
+#      with the following column names :        #
+#         o "userId", "movieId", "rating"       #
+#    - "cv_folds_count"                         #
+#      how many folds are to be used            #
+#      for hyperparameters optimization         #
+#      (the remainder for training)             #
+#    - "lambdas" list of different values       #
+#      to be considered for "lambda"            #
+#      (penalty term)                           #
+#    - "ks" list of different values            #
+#      to be considered for "k"                 #
+#      (neighbors count)                        #
+#    - "prcomp_ranks" list of different values  #
+#      to be considered for "prcomp_rank"       #
+#      (primary components count)               #
+#    - "rel_props" list of different values     #
+#      to be considered for "rel_prop"          #
+#      (relative proportion on the final result #
+#       of the weight PCA predictions over      #
+#       those of the KNN prediction)            #
+#    - "print_comments" do (or not) show        #
+#      progress info on the console             #
+#################################################
+# resultset (list of objects) :                 #
+#                                               #
+#    - "lambda" - the optimum parameter value   #
+#    - "mu_hat", "movie_avgs" and "user_avgs"   #
+#      the regularization parameters            #
+#    - "residuals_matrix" - "residual ratings"  #
+#      (remainder after "Regularization")       #
+#                                               #
+#    - "k" - the optimum parameter value        #
+#    - "similarities_matrix"                    #
+#      the movies cosine similarity matrix      #
+#                                               #
+#    - "prcomp_rank"                            #
+#      the optimum parameter value              #
+#    - "pca" - the primary components           #
+#      decomposition object                     #
+#      (of class "prcomp")                      #
+#                                               #
+#    - "rel_prop"                               #
+#      the optimum parameter value              #
+#                                               #
+#    - "cv_k_models"                            #
+#      a data.frame of "cv_folds_count" rows,   #
+#      each corresponding to a "fold" model     #
+#      (e.g. having the structure of an object  #
+#       returned by the "get_model_instance"    #
+#       function)                               #
+#################################################
+```
+
+### model_predict {.unnumbered}
+
+```{r echo = TRUE}
+## ######################################################
+## 'model_predict' function                            ##
+#########################################################
+# inputs :                                              #
+#    - "trained_model_instance" - a 'cross-validated'   #
+#      trained model instance as generated              #
+#      by the 'get_cv_model_instance' function          #
+#    - "validation_set" - the 'validation'              #
+#      dataset                                          #
+#      to be provided in tidy format                    #
+#      with the following column names :                #
+#         o "userId", "movieId"                         #
+#    - "true_ratings" ordered vector of 'true ratings'  #
+#      for the "validation_set" list of observations    #
+#      (optional, if RMSE measures are to be provided). #
+#    - "print_comments" do (or not) show                #
+#      progress info on the console                     #
+#########################################################
+# resultset : the predicted ratings                     #
+#########################################################
+```
+
+
+
+
+\newpage
+
+$~$<!-- blank line (equation with single equation white space) -->
+
+\Vspace{3.5in}
+
+\Begin{center}
+
+## Appendix C {#appCanchor .unnumbered}
+
+Trace from a model training on the entire dataset
+
+\End{center}
+
+\newpage
+
+```{r echo = TRUE}
+# 
+# 69,878 users ; 10,677 movies.
+# //////////////////////////////////////////////////////////////
+#   TRAINING FOLD #1/10.....
+```
+
+>[truncated]
+
+```{r echo = TRUE}
+# 
+# fold #9/10 training duration : 3h 48m 45s.
+# 
+# //////////////////////////////////////////////////////////////
+#   TRAINING FOLD #10/10.....
+# training set rows count: 8,100,064 
+# test set rows count: 899,991 (10.00% of the dataset)
+# Regularization - computing "movie" & "user" effects:
+#   |===================================================|
+#   |---------------------------------------------------| done (3m 35s)
+# Regularization - optimized "penalty" term : 4.7 - RMSE = 0.8658
+# KNN - Computing the movies cosine similarity matrix.. done (18m 59s)
+# Generating the knn predictions :
+#   |=================================|
+#   |---------------------------------| done: 31m 2s
+# Movies neighbors optimization total duration : 52m 44s 
+# KNN - optimized "k" = 2,140 - RMSE = 0.8458
+# PCA - performing the primary components decomposition.. done (33m 15s).
+# intermediary housekeeping - garbage collection
+# PCA - optimizing against the amount of Primary Components:
+#   |=========| measurement 1/15
+#   |---------| done (7m 6s).
+#   |=========| measurement 2/15
+#   |---------| done (8m 49s).
+#   |=========| measurement 3/15
+#   |---------| done (8m 13s).
+#   |=========| measurement 4/15
+#   |---------| done (10m 18s).
+#   |=========| measurement 5/15
+#   |---------| done (9m 27s).
+#   |=========| measurement 6/15
+#   |---------| done (10m 25s).
+#   |=========| measurement 7/15
+#   |---------| done (9m 24s).
+#   |=========| measurement 8/15
+#   |---------| done (9m 22s).
+#   |=========| measurement 9/15
+#   |---------| done (8m 49s).
+#   |=========| measurement 10/15
+#   |---------| done (9m 57s).
+#   |=========| measurement 11/15
+#   |---------| done (9m 56s).
+#   |=========| measurement 12/15
+#   |---------| done (10m 1s).
+#   |=========| measurement 13/15
+#   |---------| done (9m 54s).
+#   |=========| measurement 14/15
+#   |---------| done (9m 48s).
+#   |=========| measurement 15/15
+#   |---------| done (9m 48s).
+# Primary components optimization total duration : 2h 54m 54s 
+# PCA - optimized "prcomp_rank" = 54 - RMSE = 0.8381
+# housekeeping - garbage collection done.
+# BAGGiNG - Optimizing against respective model instance weight :
+#   |========================|
+#   |------------------------| done (9s)
+# BAGGiNG - optimized "rel_prop" = 3.0 - RMSE = 0.837
+# fold #10/10 training duration : 3h 56m 14s.
+# 
+# //////////////////////////////////////////////////////////////
+#   total k-fold model instances training duration : 36h 24m 19s
+# //////////////////////////////////////////////////////////////
+#   
+#   Regularization - computing "movie" & "user" effects:
+#   |=|
+#   |-| done (7s)
+# KNN - Computing the movies cosine similarity matrix.. done (19m 23s)
+# PCA - performing the primary components decomposition.. done (32m 55s).
+# serializing result..
+```
+
+
+
+
+
+
+\newpage
+
+
+
+# References {.unnumbered}
+
+
+<!--
+amc_pdf_print()
+-->
+
+
+<!-- can be placed anywhere, runs at complie time, prior to printing -->
+
+\begin{filecontents*}{Reportbib.bib}
+@misc{firstCollabFiltering,
+Title = {{Using collaborative filtering to weave an information tapestry}},
+howpublished = {\url{https://dl.acm.org/citation.cfm?doid=138859.138867}},
+Year = {1992}
+}
+
+@misc{twoDecades,
+Title = {{Two Decades of Recommender Systems at Amazon.com}},
+howpublished = {\url{https://pdfs.semanticscholar.org/0f06/d328f6deb44e5e67408e0c16a8c7356330d1.pdf}},
+Year = {2017}
+}
+
+@misc{microsoftResearch,
+Title = {{Personalized Recommendation Systems - Five Hot Research Topics You Must Know}},
+howpublished = {\url{https://www.microsoft.com/en-us/research/lab/microsoft-research-asia/articles/personalized-recommendation-systems/}},
+Year = {2018},
+Month = {Novembre}
+}
+
+@misc{socialNetworks,
+Title = {{Supervised Random Walks - Predicting and Recommending Links in Social Networks}},
+howpublished = {\url{https://www-cs.stanford.edu/~jure/pubs/linkpred-wsdm11.pdf}},
+Year = {2011}
+}
+
+@misc{marketplaceEconomics,
+Title = {{Economics of Recommender System in Online Marketplaces}},
+howpublished = {\url{http://libtreasures.utdallas.edu/xmlui/bitstream/handle/10735.1/5485/ETD-5608-7403.99.pdf?sequence=5}},
+Year = {2017},
+Month = {August}
+}
+
+@misc{netflixWinSummary,
+Title = {{Winning the Netflix Prize: A Summary}},
+howpublished = {\url{http://blog.echen.me/2011/10/24/winning-the-netflix-prize-a-summary/}},
+Year = {2011},
+Month = {September}
+}
+
+@misc{netflixBellKorenSolution,
+Title = {{The BellKor Solution to the Netflix Grand Prize}},
+howpublished = {\url{https://www.netflixprize.com/assets/GrandPrize2009_BPC_BellKor.pdf}},
+Year = {2009},
+Month = {August}
+}
+
+@misc{netflixPrivacyLawsuit,
+Title = {{Netflix Privacy Lawsuit}},
+howpublished = {\url{https://www.wired.com/2009/12/netflix-privacy-lawsuit/}},
+Year = {2009}
+}
+
+@misc{movieLensEntireDataset,
+Title = {{Entire latest 'MovieLens' dataset ; Full 27,000,000 ratings as of End of 2018)}},
+howpublished = {\url{https://grouplens.org/datasets/movielens/latest/}},
+Year = {2019}
+}
+
+@misc{boostWiki,
+Title = {{Boosting (machine learning)}},
+howpublished = {\url{https://en.wikipedia.org/wiki/Boosting_(machine_learning)}}
+}
+
+@misc{stackIntro,
+Title = {{The BellKor Solution to the Netflix Grand Prize}},
+howpublished = {\url{http://blog.kaggle.com/2017/06/15/stacking-made-easy-an-introduction-to-stacknet-by-competitions-grandmaster-marios-michailidis-kazanova/}},
+Year = {2017},
+Month = {June}
+}
+
+@misc{stackIntroYoutube,
+Title = {{Marios Michailidis: How to become a Kaggle nb. 1: An introduction to model stacking}},
+howpublished = {\url{https://youtu.be/9Vk1rXLhG48}},
+Year = {2017},
+Month = {May}
+}
+
+@misc{crossValidationExplained,
+Title = {{Cross-Validation Explained)}},
+howpublished = {\url{http://genome.tugraz.at/proclassify/help/pages/XV.html}},
+Year = {2006}
+}
+
+@misc{overfitting,
+Title = {{Overfitting in Machine Learning)}},
+howpublished = {\url{https://elitedatascience.com/overfitting-in-machine-learning}},
+Year = {2017}
+}
+
+@misc{lucBesson,
+Title = {{Luc BESSON - en.wikipedia)}},
+howpublished = {\url{https://en.wikipedia.org/wiki/Luc_Besson}}
+}
+
+@misc{jeanDujardin,
+Title = {{Jean DUJARDIN - en.wikipedia)}},
+howpublished = {\url{https://en.wikipedia.org/wiki/Jean_Dujardin}}
+}
+
+@misc{movieLens10MDataset,
+Title = {{Dataset containing 10,000,054 ratings and 95,580 tags applied to 10,681 movies by 71,567 users of the online movie recommender service MovieLens.)}},
+howpublished = {\url{https://grouplens.org/datasets/movielens/10m/}},
+Year = {2009}
+}
+
+@misc{movieLens10MDatasetPaper,
+Title = {{The MovieLens Datasets - History and Context. ACM Transactions on interactive intelligent Systems (TiiS) 5, 4, Article 19, 19 pages.}},
+Author={F. Maxwell Harper and Joseph A. Konstan},
+howpublished = {\url{http://dx.doi.org/10.1145/2827872}},
+Year = {2015},
+Month = {December}
+}
+
+@misc{windowsVirtualMemory,
+Title = {{How to manage Windows 10 Virtual Memory}},
+howpublished = {\url{https://www.geeksinphoenix.com/blog/post/2016/05/10/how-to-manage-windows-10-virtual-memory.aspx}},
+Year = {2016},
+Month = {May}
+}
+
+@misc{windowsPartition,
+Title = {{How to manage Windows 10 Virtual Memory}},
+howpublished = {\url{https://www.easeus.com/partition-master/partition-windows-10-free.html}},
+Year = {2016},
+Month = {May}
+}
+
+@misc{microsoftRopen,
+Title = {{Microsoft R Open}},
+howpublished = {\url{https://mran.microsoft.com/open}}
+}
+
+@misc{multithreadingWindows,
+Title = {{Multithreading on Windows}},
+howpublished = {\url{https://mran.microsoft.com/documents/rro/multithread#mt-windows}}
+}
+
+@misc{whyRslow,
+Title = {{Why is R slow?}},
+subtitle = {some explanations and MKL/OpenBLAS setup to try to fix this},
+howpublished = {\url{https://www.r-bloggers.com/why-is-r-slow-some-explanations-and-mklopenblas-setup-to-try-to-fix-this/}}
+}
+
+@misc{rstudioRversion,
+Title = {{Changing R versions for RStudio desktop}},
+howpublished = {\url{https://support.rstudio.com/hc/en-us/articles/200486138-Using-Different-Versions-of-R}},
+Year = {2019},
+Month = {March}
+}
+
+@misc{32_64bitsRstudio,
+Title = {{RStudio running on 32 bit on a 64 bit OS with 64 bit R installation}},
+howpublished = {\url{https://stackoverflow.com/questions/51704038/rstudio-running-on-32-bit-on-a-64-bit-os-with-64-bit-r-installation}},
+Year = {2018},
+Month = {August}
+}
+
+@misc{vectorization,
+Title = {{Day 92 of Tomáš Bouda's 100 days of algorithm - pca algorithm in R}},
+howpublished = {\url{http://clarkfitzg.github.io/2017/11/06/are-apply-functions-faster-than-for-loops/}},
+Year = {2017},
+Month = {June}
+}
+
+@misc{foreachSlower,
+Title = {{are apply functions faster than for loops?}},
+howpublished = {\url{https://stackoverflow.com/questions/16963808/foreach-dopar-slower-than-for-loop#16964023}},
+Year = {2017},
+Month = {November}
+}
+
+@misc{foreachCombine,
+Title = {{R foreach with .combine=rbindlist}},
+howpublished = {\url{https://stackoverflow.com/questions/17411223/r-foreach-with-combine-rbindlist#17411848}},
+Year = {2013},
+Month = {July}
+}
+
+@misc{rbindlist,
+Title = {{Why is rbindlist “better” than rbind?}},
+howpublished = {\url{https://stackoverflow.com/questions/15673550/why-is-rbindlist-better-than-rbind#23983648}},
+Year = {2014},
+Month = {June}
+}
+
+@misc{progBarDoPar,
+Title = {{Progress bar when using dopar}},
+howpublished = {\url{https://stackoverflow.com/questions/10903787/how-can-i-print-when-using-dopar#15078540}},
+Year = {2015},
+Month = {February}
+}
+
+@misc{errorWrittingToConnection,
+Title = {{doParallel error in R - error writing to connection}},
+howpublished = {\url{https://stackoverflow.com/questions/28503208/doparallel-error-in-r-error-in-serializedata-nodecon-error-writing-to-con}},
+Year = {2015},
+Month = {February}
+}
+
+@misc{errorWrittingToConnection2,
+Title = {{doParallel error in R - error writing to connection 2}},
+howpublished = {\url{https://stackoverflow.com/questions/51054423/error-in-serializedata-nodecon-error-writing-to-connection}},
+Year = {2018},
+Month = {June}
+}
+
+@misc{rcppForEveryone,
+Title = {{Rcpp for everyone}},
+Author={Masaki E. TSUDA},
+howpublished = {\url{https://teuder.github.io/rcpp4everyone_en/}},
+Year = {2019},
+Month = {February}
+}
+
+@misc{rcppSugarFunctions,
+Title = {{Rcpp Version 1.0.1 Documentation}},
+Author={Dirk EDDELBUETTEL},
+howpublished = {\url{http://dirk.eddelbuettel.com/code/rcpp/html/dir_edae2c70406e9616e8689419d3d5106b.html}},
+}
+
+@misc{nativeCosineSimilarity,
+Title = {{Visualising Word2Vec Word Vectors}},
+Author={Rebecca BARTER},
+howpublished = {\url{https://rlbarter.github.io/superheat-examples/Word2Vec/#visualising-cosine-similarity-for-the-40-most-common-words}},
+Year = {2019},
+Month = {February}
+}
+
+@misc{pcainRalgo,
+Title = {{Day 92 of Tomáš Bouda's 100 days of algorithm - pca algorithm in R}},
+howpublished = {\url{https://medium.com/100-days-of-algorithms/day-92-pca-bdb66840a8fb#dc37}},
+Year = {2017},
+Month = {June}
+}
+
+@misc{installRmpi,
+Title = {{instructions to install and run Rmpi under Microsoft MPi}},
+howpublished = {\url{http://fisher.stats.uwo.ca/faculty/yu/Rmpi/}},
+Year = {2018},
+Month = {May}
+}
+
+@misc{mpiStandard,
+Title = {{MPi Forum}},
+howpublished = {\url{https://www.mpi-forum.org/}},
+Year = {2018},
+Month = {May}
+}
+
+@misc{frenchBaguette,
+Title = {{French Baguette}},
+howpublished = {\url{https://en.wikipedia.org/wiki/Baguette}}
+}
+
+@misc{kfoldVsBootstrap,
+Title = {{Difference between bootstrapping and cross-validation}},
+howpublished = {\url{https://datascience.stackexchange.com/questions/32264/what-is-the-difference-between-bootstrapping-and-cross-validation#32276}},
+Year = {2018},
+Month = {May}
+}
+
+@misc{rKnnAlgo,
+Title = {{User-based nearest neighbour implementation in R?}},
+howpublished = {\url{https://datascience.stackexchange.com/questions/6660/user-based-nearest-neighbour-implementation-in-r#6690}},
+Year = {2015},
+Month = {August}
+}
+
+@misc{distSimMeasures,
+Title = {{Distance and Similarity Measures}},
+howpublished = {\url{https://reference.wolfram.com/language/guide/DistanceAndSimilarityMeasures.html}}
+}
+
+@misc{curseOfDim,
+Title = {{Explain “Curse of dimensionality” to a child}},
+howpublished = {\url{https://stats.stackexchange.com/questions/169156/explain-curse-of-dimensionality-to-a-child#169170}},
+Year = {2015},
+Month = {August}
+}
+
+@misc{pcaGuide,
+Title = {{Practical Guide to Principal Component Analysis (PCA) in R and Python}},
+howpublished = {\url{https://www.analyticsvidhya.com/blog/2016/03/practical-guide-principal-component-analysis-python/}},
+Year = {2016},
+Month = {March}
+}
+
+@misc{pcainR,
+Title = {{Principal Component Analysis in R}},
+howpublished = {\url{https://www.r-bloggers.com/principal-component-analysis-in-r/}},
+Year = {2017},
+Month = {January}
+}
+
+@misc{clickStreamReco,
+Title = {{Building a Collaborative Filtering Recommender System with ClickStream Data}},
+howpublished = {\url{https://towardsdatascience.com/building-a-collaborative-filtering-recommender-system-with-clickstream-data-dffc86c8c65}},
+Year = {2019},
+Month = {April}
+}
+
+@misc{lcars,
+Title = {{LCARS - A Location-Content-Aware Recommender System}},
+howpublished = {\url{https://www.cs.cmu.edu/~zhitingh/data/kdd13_lcars.pdf}},
+Year = {2013}
+}
+
+@misc{crowdRnD,
+Title = {{What the Failed Netflix Prize Says About Business Advice}},
+howpublished = {\url{https://www.forbes.com/sites/ryanholiday/2012/04/16/what-the-failed-1m-netflix-prize-tells-us-about-business-advice/}},
+Year = {2012},
+Month = {April}
+}
+
+@misc{matlabNetflixML,
+Title = {{Matlab - The Netflix Prize and Production Machine Learning Systems - An Insider Look}},
+howpublished = {\url{https://blogs.mathworks.com/loren/2015/04/22/the-netflix-prize-and-production-machine-learning-systems-an-insider-look/#390faa49-a84f-4399-bb8e-ce3402b96044}},
+Year = {2015},
+Month = {April}
+}
+
+@misc{coldStart,
+Title = {{Exploiting User Demographic Attributes for Solving Cold-Start Problem in Recommender System}},
+howpublished = {\url{http://www.lnse.org/papers/66-CA2016.pdf}},
+Year = {2013},
+Month = {August}
+}
+
+@misc{cnilWiki,
+Title = {{Commission nationale de l'informatique et des libertés - en.wikipedia}},
+howpublished = {\url{https://en.wikipedia.org/wiki/Commission_nationale_de_l%27informatique_et_des_libert%C3%A9s}}
+}
+
+@misc{cnil,
+Title = {{CNIL - To protect personal data, support innovation, preserve individual liberties}},
+howpublished = {\url{https://www.cnil.fr/en/home}}
+}
+
+@misc{cnilGlossary,
+Title = {{CNIL - English French glossary on data protection}},
+howpublished = {\url{https://www.cnil.fr/en/english-french-glossary-data-protection}}
+}
+
+@misc{privacy,
+Title = {{Toward Privacy-Preserving Personalized Recommendation Services}},
+howpublished = {\url{https://www.sciencedirect.com/science/article/pii/S2095809917303855}},
+Year = {2013},
+Month = {August}
+}
+
+@misc{norwayPrivacy,
+Title = {{A Survey on Norwegian User's Perspective on Privacy in Recommender Systems}},
+howpublished = {\url{http://ceur-ws.org/Vol-2041/paper7.pdf}},
+Year = {2017}
+}
+
+@misc{euGdpr,
+Title = {{2018 reform of EU data protection rules}},
+howpublished = {\url{https://ec.europa.eu/commission/priorities/justice-and-fundamental-rights/data-protection/2018-reform-eu-data-protection-rules_en}},
+Year = {2016},
+Month = {April}
+}
+
+@misc{ccpa,
+Title = {{Californians for Consumer Privacy}},
+howpublished = {\url{https://www.caprivacy.org/about}},
+Year = {2018},
+Month = {June}
+}
+
+@misc{dojCcpa,
+Title = {{State of California Department of Justice - California Consumer Privacy Act (CCPA)}},
+howpublished = {\url{https://oag.ca.gov/privacy/ccpa}},
+Year = {2018},
+Month = {June}
+}
+
+@misc{exposureDiversity,
+Title = {{Exposure diversity as a design principle for recommender systems}},
+howpublished = {\url{https://www.ivir.nl/publicaties/download/ICS_2016.pdf}},
+Year = {2016},
+Month = {December}
+}
+
+@misc{techDiversityPb,
+Title = {{Tech’s ethical problem is also a diversity problem}},
+howpublished = {\url{https://www.fastcompany.com/90259821/the-answer-to-techs-ethical-problems-is-greater-diversity}},
+Year = {2018},
+Month = {November}
+}
+
+@misc{recoBusinessValue,
+Title = {{Empirical Analysis of the Business Value of Recommender Systems}},
+howpublished = {\url{http://blogs.darden.virginia.edu/venkatesanr/files/2012/07/empirical-value-of-recommender-system-JMiS.pdf}},
+Year = {2006}
+}
+
+@misc{yaleRecoBuyersSegment,
+Title = {{OPTiMAL PRICING WiTH RECOMMENDER SYSTEMS}},
+howpublished = {\url{https://cpb-us-w2.wpmucdn.com/campuspress.yale.edu/dist/3/352/files/2011/01/Paper19_p1177.pdf}},
+Year = {2006}
+}
+\end{filecontents*}
+
+
+
+
+<!--
+amc_pdf_print()
+-->
+
+
+
+<!--
+
+# An Example R Markdown (nice summary of latex equations) :
+# @see 'http://www.statpower.net/Content/310/R%20Stuff/SampleMarkdown.html'
+# @see 'http://pages.stat.wisc.edu/~jgillett/371/RStudio/RMarkdown.pdf'
+#
+# Advance Mathematics :
+# @see 'https://en.wikibooks.org/wiki/LaTeX/Advanced_Mathematics'
+#
+# Allow calculation :
+# @see 'http://latexcalc.sourceforge.net/'
+#
+# Disable R-studio source code preview :
+# @see 'https://stackoverflow.com/questions/42350815/rstudio-disable-output-of-a-code-in-source-window-while-writing-rmarkdown-docum'
+#
+# Online renderer :
+# @see 'http://www.hostmath.com/'
+
+# Embed "external" file :
+# @see 'https://tex.stackexchange.com/questions/301134/sudden-error-in-texshop-i-found-no-bibdata-and-i-found-no-bibstyle'
+
+# EXAMPLE OF 'TEX' FiLE (convert markdown to pdf with pandoc)
+# @see 'https://gist.github.com/wgzhao/e66c3cbf397431cd5af1'
+
+# Start numbering sections at '0' :
+# @see 'https://tex.stackexchange.com/questions/107470/getting-section-numbering-to-start-at-0#107472'
+# @see 'https://community.rstudio.com/t/chapter-starts-with-0-1-not-1-0-in-pdf-book-format/12797/4'
+
+# for Table Of Contents :
+# @see 'https://stackoverflow.com/questions/23957278/how-to-add-table-of-contents-in-rmarkdown#50330496'
+
+# for "internal" links :
+# @see 'https://stackoverflow.com/questions/33913780/internal-links-in-rmarkdown-dont-work'
+
+# \includegraphics — file not found :
+# @see 'https://tex.stackexchange.com/questions/95617/includegraphics-file-not-found-even-when-in-same-directory'
+
+# Reference different places to the same footnote :
+# @see 'https://stackoverflow.com/questions/46117527/how-to-reference-two-times-to-a-single-footnote-in-rmarkdown'
+# @see 'https://tex.stackexchange.com/questions/35043/reference-different-places-to-the-same-footnote#44643'
+#
+# Forcing footnote at bottom of pages :
+# @see 'https://latex.org/forum/viewtopic.php?t=5001#p65775'
+# @see 'https://tex.stackexchange.com/questions/4902/why-is-my-footnote-glued-to-the-text'
+#
+# Table-specific footnotes :
+# @see 'https://stackoverflow.com/questions/27933076/how-can-i-add-notes-to-the-bottom-of-a-table-using-knitrkable'
+
+# LaTex tables side-by-side:
+# @see 'https://stackoverflow.com/questions/48211887/how-can-the-backticks-printed-around-these-tables-be-escaped#48526024'
+# LaTex cross-reference to a table :
+# @see 'https://tex.stackexchange.com/questions/12184/reference-to-a-table-before-it-appears#12186'
+
+# fancy page Headers and Footers :
+# @see 'https://stackoverflow.com/questions/25329375/creating-a-footer-for-every-page-using-r-markdown'
+# @see 'https://tex.stackexchange.com/questions/423358/horizontal-alignment-of-3-elements-in-footer-of-a-pdf-output-from-rmarkdown-usin'
+#
+# Custom first page Header/Footer with fancyhdr
+# @see 'https://tex.stackexchange.com/questions/30228/custom-first-page-with-fancyhdr'
+#
+# including section titles in fancyhf headers :
+# @see 'https://tex.stackexchange.com/questions/166804/including-section-titles-in-fancyhf-headers'
+#
+# fancy headers/footers
+# @see 'https://community.rstudio.com/t/custom-position-of-page-numbers/7873/2'
+# @see 'https://stackoverflow.com/questions/29346872/changing-color-of-all-headers-in-pdf-output-by-rmarkdown'
+
+# setting the "pdfpagemode" :
+# @see 'https://ctan.crest.fr/tex-archive/macros/latex/contrib/hyperref/doc/manual.html'
+# @see 'https://tex.stackexchange.com/questions/50814/how-to-disable-initial-view-of-pdf-bookmarks-panel'
+# @see 'https://tex.stackexchange.com/questions/234974/pdf-bookmarks-dont-work-correctly-every-reference-points-to-the-first-page-of'
+# @see 'https://tex.stackexchange.com/questions/150221/pdfx-package-leads-to-non-working-hyperref-links'
+
+# Setting the 'creation date' (leaving 'last modified' default):
+# @see 'https://tex.stackexchange.com/questions/94484/how-to-add-customized-created-modified-date-to-the-pdf-properties-information-wh'
+
+# page number starts at "2" issue
+# @see 'https://stackoverflow.com/questions/38765422/how-to-start-page-numbering-in-r-markdown-from-the-second-page'
+
+# References
+# @see 'https://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html'
+
+# page bgcolor
+# @see 'https://stackoverflow.com/questions/29033677/change-background-colour-of-rmarkdown-pdf-output'
+
+# Line Overflow and Page Breaks :
+# @see 'https://tex.stackexchange.com/questions/340913/line-overflow-and-page-breaks-in-references-bibliography-in-rmarkdown-pdf-pando'
+
+# Cross-referencing Tables and Figures
+# @see 'https://stackoverflow.com/questions/24086498/i-cant-generate-labelfigmwe-plot-with-knitr/24087398#24087398'
+
+# Flexibility in "TABLE" formatting
+# the 'pander' function (requires specific R-package to be installed)
+
+# scale the table to page width
+# @see 'https://stackoverflow.com/questions/44490209/how-to-change-font-size-of-table-in-rmarkdown-latex-and-pdf'
+
+# List of References
+#
+# @see 'https://www.reddit.com/r/LaTeX/comments/438zmt/inline_citation_of_websites/'
+# @see 'https://stackoverflow.com/questions/50048754/change-bibliographystyle-in-r-markdown'
+# @see 'https://stackoverflow.com/questions/38077863/use-custom-citation-style-in-markdown-using-yaml-header'
+# @see 'https://www.stefaanlippens.net/bibentry/'
+# Changing depth of the bibliography section's headline :
+# @see 'https://latex.org/forum/viewtopic.php?t=12607'
+# @see 'https://tex.stackexchange.com/questions/412441/number-reference-headline?noredirect=1&lq=1'
+# @see 'https://stackoverflow.com/questions/144639/how-to-order-citations-by-appearance-using-bibtex'
+# @see 'https://latex.org/forum/viewtopic.php?t=20677'
+# @see 'https://tex.stackexchange.com/questions/61877/natbib-sorting-and-citation-order-by-appearance'
+# @see 'https://tex.stackexchange.com/questions/246386/changing-color-of-cites-with-hypersetup-not-working'
+
+# list of Tables / Figures :
+# @see 'https://stackoverflow.com/questions/26883864/knitr-templating-dynamic-chunks-issue'
+# @see 'https://gist.github.com/benmarwick/f3e0cafe668f3d6ff6e5'
+# @see 'https://stackoverflow.com/questions/38861041/knitr-rmarkdown-latex-how-to-cross-reference-figures-and-tables'
+# @see 'https://stackoverflow.com/questions/24086498/i-cant-generate-labelfigmwe-plot-with-knitr/24087398#24087398'
+
+# How do i center text in LaTeX :
+# @see 'https://www.quora.com/How-do-i-center-text-in-LaTeX'
+
+# Rmarkdown - prevent the source code from running off a pdf page
+# @see 'https://stackoverflow.com/questions/26210656/in-r-markdown-in-rstudio-how-can-i-prevent-the-source-code-from-running-off-a-p'
+
+# ----------------------------------------------------------------------- #
+
+# go parallel in R :
+# @see 'https://gis.stackexchange.com/questions/241255/efficient-spatial-joining-for-large-dataset-in-r#241338'
+
+# Convert a factor of character to a vector of numeric :
+# https://stackoverflow.com/questions/3418128/how-to-convert-a-factor-to-integer-numeric-without-loss-of-information#3418192
+
+# Simultaneously merge multiple data.frames in a list
+# @see 'https://stackoverflow.com/questions/8091303/simultaneously-merge-multiple-data-frames-in-a-list'
+
+# Element-wise mean over list of matrices [duplicate]
+# @see 'https://stackoverflow.com/questions/19218475/element-wise-mean-over-list-of-matrices'
+
+# @see 'https://stats.stackexchange.com/questions/61090/how-to-split-a-data-set-to-do-10-fold-cross-validation'
+
+# How does centering make a difference in PCA (for SVD and eigen decomposition) ?
+# @see 'https://stats.stackexchange.com/questions/189822/how-does-centering-make-a-difference-in-pca-for-svd-and-eigen-decomposition#189902'
+
+# How to cross-validate PCA, clustering, and matrix decomposition models
+# @see 'http://alexhwilliams.info/itsneuronalblog/2018/02/26/crossval/'
+
+# Performing Principal Components Regression (PCR) in R
+# @see 'http://www.milanor.net/blog/performing-principal-components-regression-pcr-in-r/'
+
+# RStudio does not display any output in console after entering code :
+# @see 'https://stackoverflow.com/questions/26495498/rstudio-does-not-display-any-output-in-console-after-entering-code'
+sink()
+print( "titi" )
+
+# equivalent of "wget" for Windows :
+# @see 'https://superuser.com/questions/129269/download-a-file-via-http-from-a-script-in-windows/747044#747044'
+# powershell -command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12}"; "& {Invoke-WebRequest -OutFile harvardx_logo_100.jpg -Uri https://www.edx.org/sites/default/files/upload/}"
+-->
+
+<!--
+amc_pdf_print()
+-->
+
+```{r echo=FALSE}
+rm( theme_amc, empty_plot, empty_table, params )
+# warnings()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
