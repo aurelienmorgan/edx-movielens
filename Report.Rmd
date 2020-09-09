@@ -1,5 +1,5 @@
 ---
-title: \pagenumbering{gobble} <!-- ends page numbering "`r Sys.Date()`" -->\vspace{3.5in}Introductory Recommender Engine
+title: \pagenumbering{gobble} <!-- ends page numbering "`r Sys.Date()`" -->\vspace{3.5in}Product Recommender Engine
 subtitle: "Use Case: 'The MovieLens 10M dataset'"
 date: "2019-02-27"
 author: "Aurélien-Morgan"
@@ -391,15 +391,15 @@ amc_pdf_print()
 
 # For the little geek in you {#technicalAnchor}
 
-Lets get a little technical. its gonna be brief and informative, i promise. I'll try to always remain engaging but if you have no interest in unveiling how to execute, even partly, the prediction procedure here depicted, you can simply skip over this section. There's much fun in reading the rest anyway !
+Lets get a little technical. its gonna be brief and informative, I promise. I'll try to always remain engaging but if you have no interest in unveiling how to execute, even partly, the prediction procedure here depicted, you can simply skip over this section. There's much fun in reading the rest anyway !
 
 The intent was to provide people with procedures and results that could fully be reproduced by anyone at home without any monetary investment and reliance over cloud computing, as long as they own a relatively modern PC.
 
 The _R_ and _Python_ languages have that in common that objects they are using are hold in virtual memory. They both struggle at dealing natively with large ones. For that reason, the _movielens_ dataset that we employ here, with its 10 million records, is large enough that it requires particular measures to be taken for it to be manageable on a single laptop.  
-At our disposal, a machine hosting a Windows 10 Operating System with an "8th Gen. intel^®^ Core^TM^ i7 processor"[^id_726] (6 cores ; 12 logical processors), 256 GB of SSD storage on the same disk as the one hosting the O.S. and 16 GB of memory[^id_729]. We won't speak of other characteristics such as GPU as it is of no use here.
+At our disposal, a machine hosting a Windows 10 Operating System with an "8th Gen. intel^®^ Core^TM^ i7 processor"[^id_726] (6 cores ; 12 logical processors), 256 GB of SSD storage on the same disk as the one hosting the O.S. and 16 GB of memory[^id_729]. We won't speak of other characteristics such as GPU as it is not exploited in the use case that concerns us here.
 
 At its peak, the algorithm put together to generate this report requires a little over 60 gigabytes of memory. To circumvent that constraint, we need to extend the memory capacity for R and this is feasible by first increasing the O.S. paging size as explained here&nbsp;: [@windowsVirtualMemory]&[@windowsPartition].
-if you can, set the maximum memory allocation for R at up to 128 GB. in addition to the above, it must also be informed at the 'R session' level with the below line of code&nbsp;:
+if you can, set the maximum memory allocation for R at up to 128 GB. In addition to the above, it must also be informed at the 'R session' level with the below line of code&nbsp;:
 
 ```{r echo = TRUE, eval = FALSE } 
 memory.limit( size = 128000 )
@@ -434,6 +434,8 @@ In addition to the above mentionned arrangments, many tricks in the books had to
 Of course, easilly available solutions such as the ones offered by the _recommenderlab_ package already exist. They are however very much craving in terms of memory and, very demanding in terms of processing power (which often translates in unbearably long training times).
 
 Further enhancements can of course still be brought to the algorithm as delivered. It would for instance be an easy win to further extend the resort to Rcpp, or even relate to the _RcppParallel_ package. An other area that has not been explored but which could present advantages relies with _Microsoft MPI_[^id_560] in conjunction with the _Rmpi_ package[@installRmpi].  
+An even much larger gain could indeed be achieved if all these solutions were used in conjunction with the usage of GPU.
+
 A detailed trace generated during the training of a fully cross-validated final model instance can be found [Appendix C](#appCanchor). It shows progress information together with timing measures.
 
 
@@ -823,7 +825,7 @@ amc_pdf_print()
 
 ### The "pattern" matrix
 
-The **pattern** matrix has _"movies count"_ rows and encompasses the relation between each movie and each primary component. it's in the _pattern_ matrix that we can identify clusters of movies. For instance, looking at _PC1_, the first primary component, the one explaining for most of the user ratings variability, we can guesstimate what the most important characteristic within our set of movies is.
+The **pattern** matrix has _"movies count"_ rows and encompasses the relation between each movie and each primary component. It's in the _pattern_ matrix that we can identify clusters of movies. For instance, looking at _PC1_, the first primary component, the one explaining for most of the user ratings variability, we can guesstimate what the most important characteristic within our set of movies is.
 
 ```{r echo = FALSE }
 if( !is.null( trained_model_instance ) ) {
@@ -997,7 +999,7 @@ if( !is.null( trained_model_instance ) ) {
 }
 ```
 
-The _variance explained_ is the cummulative sum of the standard deviation of all the  primary components. For instance, we can see figure \ref{fig:fig_pca}(a) that it takes the first `r which( var_explained_df$var_explained >= .8 )[ 1 ]` primary components to account for 80% of the variability in our dataset.  
+The _variance explained_ is the cummulative sum of the standard deviation of all the  primary components. For instance, we can see figure \ref{fig:fig_pca}(a) that it takes the first `r format( which( var_explained_df$var_explained >= .8 )[ 1 ], nsmall = 0, big.mark = "," )` primary components to account for 80% of the variability in our dataset.  
 This figure shows **variance explained** over **rank** for each of the pca model instances of the whole k-fold training process. We can notice there that all `r nrow( trained_model_instance$cv_k_models ) + 2` curves overlay at this magnification. The differences between each of them is not enormous.
 
 ```{r fig_pca, echo = FALSE, fig.height = 4, fig.cap="\\label{fig:fig_pca}Variance explained" }
@@ -1406,7 +1408,12 @@ if( !is.null( trained_model_instance ) ) {
       xintercept = mean(
         trained_model_instance$k )
       , size = 1, color = "skyblue3"
-      , linetype = "dashed" )
+      , linetype = "dashed" ) +
+    scale_x_continuous( labels = scales::comma ) +
+    theme( axis.text.x = element_text(
+      angle = 45
+      , vjust = 1
+      , hjust = 1 ) )
 } else {
   knn_res_plot <- empty_plot
 }
@@ -1630,7 +1637,7 @@ if( !is.null( trained_model_instance ) ) {
 ```{r include=TRUE, echo=FALSE, fig.show='asis', fig.keep='high' }
 rel_prop_res_plot + theme_amc( base_size_ = 28 )
 ```
-\caption{\label{fig:rel_prop_res}KNN optimization}
+\caption{\label{fig:rel_prop_res}Bagging optimization}
 \End{wrapfigure}
 
 ```{r echo = FALSE }
@@ -1739,7 +1746,7 @@ if( !is.null( predictions ) ) {
 
 We did cover many aspects of the algorithm that won the Grand Prize from the Netflix^TM^ challenge. For simplicity, many other (secondary) characteristics have been left aside, for instance no consideration has been given to time variations such as the fact that users become harsher critics over time.
 
-> DISCLAIMER: In the context of the Netflix^TM^ challenge, the final RMSE was higher than the one we obtain here despite the fact that that other dataset had 10 times more records than us but, no conclusion can't be drawn as long as we don't have accesss to the original dataset.
+> DISCLAIMER: In the context of the Netflix^TM^ challenge, the final RMSE was higher than the one we obtain here despite the fact that that other dataset had 10 times more records than us but, no conclusion can be drawn as long as we don't have accesss to the original dataset.
 
 
 
@@ -1773,7 +1780,7 @@ At the moment, **models explainability** is of the essence. Machine Learning alg
 
 * Privacy - The topic of users/consumers data privacy did not await the 21^st^ century to emerge, with for example the creation by France in January 1978 of a dedicated surveillance commission&nbsp;: the "_Commission nationale de l'informatique et des libertés_" (CNIL)[@cnilWiki][@cnil][@cnilGlossary]. The issue of course slipped rapidly into recommendation systems when they emerged[@privacy], [@norwayPrivacy]. Europe has been pioneering on the legislative front with major concerns such as **data ownership** and **data protection**, with the adoption in April 2016 of the "_EU General Data Protection Regulation_" (GDPR)[@euGdpr]. Countries outside the E.U. show growing awareness and sensitivity towards these matters, like for instance the U.S. which are yet to pass such a law but the state of California went ahead in June 2018 by passing into law the so called "_California Consumer Privacy Act_"[@ccpa][@dojCcpa].
 
-* Diversity - Last but not least, the ethical question of exposure diversity commands itself. Should recommendation systems only care about people’s past behavior and popular demand ? Aren't content quality and diversity also essential ? These issues shall always remain central to the debate on building a better tomorrow[@exposureDiversity][@techDiversityPb].
+* Diversity - Last but not least, the ethical question of **exposure diversity** commands itself. Should recommendation systems only care about people’s past behavior and popular demand ? Aren't content quality and diversity also essential ? These issues shall always remain central to the debate on building a better tomorrow[@exposureDiversity][@techDiversityPb].
 
 As already contemplated earlier in this report, the strength of recommendation are numerous ; it builds up user retention, allows room for cross sales with paired recommendations, etc[@recoBusinessValue]. There have also been many studies on the economical effect of recommender engines, such as the one reflected in this engaging research paper by the Department of Economics from YALE University on buyers segmentation based on willingness to pay less for uncertainty in trying a new product: [@yaleRecoBuyersSegment].  
 A/B testing is super trendy as a seamless method used to introduce new functionalities and improve the user experience. It consists in steering different variations of a feature towards subsets of users and then measuring which of these variations brings better performance[^id_128]. At the age of the Internet, companies continuously more try to experiment with flexibility, adopt a "trial and error" attitude, fail faster and rebound at lower cost but staying safe from the fear to innovate.  
