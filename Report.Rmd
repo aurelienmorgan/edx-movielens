@@ -638,7 +638,7 @@ if( !is.null( trained_model_instance ) ) {
 }
 ```
 
-From the two above mentioned observations, one can conclude that some ratings are to be considered as more significant/representative than others.
+From the two above mentioned observations, one can conclude that some ratings are to be considered as more significant/representative than others (e.g. if a movie only has a 5 stars rating, is it really a 5 stars movie ? comparably, if a user only gave a 1 star rating, is it really a user that rates lower than the average users ? too little records are not enough to draw conclusions).
 To the RMSE equation, we can thus add a term as a penalty that gets larger whit large $b_{i}$ and/or $b_{u}$. By doing so, we shrink the coefficient estimates towards zero (no user bias, no movie bias, for non statistically significant records).
 
 $$RMSE_{penalized} = \sqrt{ \frac{1}{N} \sum_{u,i} (y_{u,i} - (\hat{\mu} + b_{i} + b_{u}))^2 \quad + \quad \lambda (\sum_{i} b_{i}^2 + \sum_{u} b_{u}^2) }$$
